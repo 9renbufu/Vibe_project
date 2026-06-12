@@ -10,7 +10,7 @@ export interface Color {
   a?: number;
 }
 
-export type ShapeType = 'circle' | 'rectangle' | 'line' | 'triangle' | 'polygon' | 'text' | 'path';
+export type ShapeType = 'circle' | 'ellipse' | 'rectangle' | 'line' | 'triangle' | 'polygon' | 'text' | 'path';
 
 export interface Shape {
   id: string;
@@ -49,6 +49,8 @@ export interface AIResponse {
   actions: DrawingAction[];
   explanation: string;
   scene_description?: string;
+  image_url?: string;
+  image_prompt?: string;
 }
 
 export interface WebSocketMessage {

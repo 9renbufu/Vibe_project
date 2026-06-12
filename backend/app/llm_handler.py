@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from .models import (
     DrawingAction, AIResponse, Shape, ShapeType, Position, Color
 )
+from .image_generator import ImageGenerator
 
 
 class BaseLLM(ABC):
@@ -52,7 +53,9 @@ class LLMHandler:
     def __init__(self):
         self.conversation_history: List[Dict[str, str]] = []
         self.llm: Optional[BaseLLM] = None
+        self.image_generator = ImageGenerator(lazy_init=False)
         self._init_llm()
+        print(f"Image generator available: {self.image_generator.is_available()}")
 
     def _init_llm(self):
         provider = os.getenv("LLM_PROVIDER", "claude").lower()
@@ -131,47 +134,69 @@ class LLMHandler:
             name = s.get("name", s.get("id", "unknown"))
             shapes_desc += f"- {name} ({s['type']}) at ({s['position']['x']}, {s['position']['y']})\n"
 
-        return f"""你是一个 AI 绘图助手。将自然语言指令转换为绘图动作。
+        return f"""你是一个专业的 AI 绘图助手，擅长将自然语言转换为精美的绘图指令。
 
 当前场景状态:
 - 画布大小: {scene_state.get('width', 800)}x{scene_state.get('height', 600)}
-- 背景色: rgb({scene_state.get('background', {}).get('r', 255)}, {scene_state.get('background', {}).get('g', 255)}, {scene_state.get('background', {}).get('b', 255)})
 - 已有图形:
 {shapes_desc if shapes_desc else "  (空画布)"}
 
-请用 JSON 格式回复:
+请用 JSON 格式回复，生成绘图动作:
 {{
     "actions": [
         {{
             "action": "create" | "move" | "delete" | "modify" | "clear",
             "shape": {{
-                "type": "circle" | "rectangle" | "line" | "triangle" | "polygon" | "text",
+                "type": "circle" | "ellipse" | "rectangle" | "triangle" | "line" | "text" | "polygon",
                 "position": {{"x": 数字, "y": 数字}},
-                "name": "描述性名称",
-                "color": {{"r": 0-255, "g": 0-255, "b": 0-255}},
+                "name": "描述性中文名称",
+                "color": {{"r": 0-255, "g": 0-255, "b": 0-255, "a": 0-1}},
                 "fill": true/false,
                 "width": 数字,
                 "height": 数字,
                 "radius": 数字,
                 "text": "文字内容",
-                "zIndex": 数字
+                "zIndex": 数字 (1-100, 越大越上层)
             }},
             "target_name": "已有图形的名称",
             "position": {{"x": 数字, "y": 数字}},
             "properties": {{}}
         }}
     ],
-    "explanation": "简短解释你做了什么",
+    "explanation": "简短中文解释",
     "scene_description": "场景描述"
 }}
 
-重要:
-- 使用描述性名称如 "太阳"、"房子"、"树" 方便用户后续引用
-- 位置应在画布范围内 (0-800 x, 0-600 y)
-- 复杂场景拆分为多个图形
-- 使用 zIndex 控制图层 (越大越上层)
-- 颜色要丰富有创意
-- 只返回 JSON，不要其他内容"""
+绘图技巧:
+1. 使用描述性中文名称: "太阳"、"房子"、"树木"、"云朵"
+2. 位置范围: x(0-800), y(0-600)
+3. 颜色丰富: 天空用蓝色渐变，草地用绿色，太阳用金黄色
+4. 层次分明: 背景 zIndex=1, 中景 zIndex=5-10, 前景 zIndex=20+
+5. 复杂场景拆解: 先画背景(天空、地面)，再画主体(建筑、人物)，最后画细节(装饰、文字)
+6. 场景示例:
+   - "海边日落": 天空(蓝紫渐变) → 太阳(橙色圆) → 海面(蓝色矩形) → 沙滩(黄色) → 椰子树
+   - "赛博朋克城市": 深色背景 → 霓虹建筑群 → 飞车灯光 → 全息广告牌
+   - "森林小屋": 蓝天 → 绿色山丘 → 木屋 → 树木群 → 小路
+
+只返回 JSON，不要其他内容。"""
+
+    def _build_image_prompt_system(self) -> str:
+        return """你是一个专业的 AI 绘图提示词专家。将用户的中文描述转换为高质量的英文图像生成提示词。
+
+要求：
+1. 将中文翻译成英文
+2. 添加艺术风格描述（如：digital art, illustration, realistic, anime style 等）
+3. 添加细节描述（色彩、光影、构图等）
+4. 添加质量标签（如：high quality, detailed, masterpiece）
+
+只返回英文提示词，不要其他内容。
+
+示例：
+用户："画一个赛博朋克城市"
+返回："A cyberpunk city at night, neon lights, futuristic buildings, rain-soaked streets, holographic advertisements, vibrant purple and blue colors, digital art, highly detailed, 8k quality"
+
+用户："画一个海边日落"
+返回："Beautiful sunset over the ocean, golden hour, warm orange and pink sky, calm waves, silhouette of palm trees, peaceful atmosphere, realistic photography, high quality, stunning colors" """
 
     async def process_command(
         self, command: str, scene_state: Dict[str, Any]
@@ -195,7 +220,29 @@ class LLMHandler:
             if len(self.conversation_history) > 20:
                 self.conversation_history = self.conversation_history[-20:]
 
-            return self._parse_response(response_text)
+            result = self._parse_response(response_text)
+
+            # 尝试生成图像
+            if self.image_generator.is_available():
+                try:
+                    # 生成图像提示词
+                    image_prompt_system = self._build_image_prompt_system()
+                    image_prompt_response = await self.llm.chat(
+                        [{"role": "user", "content": command}],
+                        image_prompt_system
+                    )
+                    image_prompt = image_prompt_response.strip()
+                    print(f"Image prompt: {image_prompt}")
+
+                    # 生成图像
+                    image_data = await self.image_generator.generate(image_prompt)
+                    if image_data:
+                        result.image_url = image_data
+                        result.image_prompt = image_prompt
+                except Exception as e:
+                    print(f"Image generation error: {e}")
+
+            return result
 
         except Exception as e:
             print(f"LLM API error: {e}")
@@ -203,10 +250,25 @@ class LLMHandler:
 
     def _parse_response(self, text: str) -> AIResponse:
         try:
+            # 处理 markdown 代码块
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0]
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0]
+
             json_start = text.find("{")
             json_end = text.rfind("}") + 1
             if json_start != -1 and json_end > json_start:
-                data = json.loads(text[json_start:json_end])
+                json_str = text[json_start:json_end]
+                # 修复常见的 JSON 问题
+                json_str = json_str.replace('\n', ' ').replace('\r', '')
+                # 修复尾随逗号
+                import re
+                json_str = re.sub(r',\s*}', '}', json_str)
+                json_str = re.sub(r',\s*]', ']', json_str)
+                # 修复单引号
+                json_str = json_str.replace("'", '"')
+                data = json.loads(json_str)
                 actions = []
                 for a in data.get("actions", []):
                     shape = None
@@ -243,7 +305,8 @@ class LLMHandler:
         except Exception as e:
             print(f"Parse error: {e}")
 
-        return AIResponse(actions=[], explanation="无法解析指令")
+        # JSON 解析失败时，返回原始文本作为解释
+        return AIResponse(actions=[], explanation=text[:200] if text else "无法解析指令")
 
     def _fallback_parse(self, command: str, scene_state: Dict) -> AIResponse:
         actions = []

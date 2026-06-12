@@ -5,6 +5,7 @@ from enum import Enum
 
 class ShapeType(str, Enum):
     CIRCLE = "circle"
+    ELLIPSE = "ellipse"
     RECTANGLE = "rectangle"
     LINE = "line"
     TRIANGLE = "triangle"
@@ -67,6 +68,8 @@ class AIResponse(BaseModel):
     actions: List[DrawingAction]
     explanation: str
     scene_description: Optional[str] = None
+    image_url: Optional[str] = None  # base64 encoded image
+    image_prompt: Optional[str] = None  # prompt used for image generation
 
 
 class WebSocketMessage(BaseModel):

@@ -36,6 +36,7 @@ async def health():
         "status": "ok",
         "message": "VoiceSketch AI is running",
         "llm_provider": llm_handler.get_provider(),
+        "image_available": llm_handler.image_generator.is_available(),
     }
 
 
