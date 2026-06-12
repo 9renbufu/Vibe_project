@@ -27,11 +27,13 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       recognition.lang = 'zh-CN';
 
       recognition.onresult = (event: any) => {
+        console.log('Speech recognition result:', event);
         let interimTranscript = '';
         let finalTranscript = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
+          console.log(`Result ${i}: isFinal=${result.isFinal}, transcript=${result[0].transcript}`);
           if (result.isFinal) {
             finalTranscript += result[0].transcript;
           } else {
@@ -39,10 +41,15 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           }
         }
 
-        setTranscript(interimTranscript || finalTranscript);
+        const currentTranscript = interimTranscript || finalTranscript;
+        console.log('Setting transcript:', currentTranscript);
+        setTranscript(currentTranscript);
 
         if (finalTranscript) {
+          console.log('Final transcript, calling onResult:', finalTranscript);
           onResult(finalTranscript);
+          // 清空 transcript 显示
+          setTimeout(() => setTranscript(''), 1000);
         }
       };
 

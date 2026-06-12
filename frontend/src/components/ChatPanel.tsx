@@ -45,7 +45,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, isProcessing }) 
             <div style={styles.messageRole}>
               {msg.role === 'user' ? ' ' : ' ️'}
             </div>
-            <div style={styles.messageContent}>{msg.content}</div>
+            <div style={{
+              ...styles.messageContent,
+              ...(msg.role === 'user' ? styles.userContent : styles.assistantContent),
+            }}>
+              {msg.content}
+            </div>
           </div>
         ))}
 
@@ -143,6 +148,16 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     fontSize: '14px',
     lineHeight: '1.5',
+  },
+  userContent: {
+    backgroundColor: '#667eea',
+    color: 'white',
+    borderBottomRightRadius: '4px',
+  },
+  assistantContent: {
+    backgroundColor: '#f0f0f0',
+    color: '#333',
+    borderBottomLeftRadius: '4px',
   },
   typing: {
     animation: 'pulse 1.5s infinite',

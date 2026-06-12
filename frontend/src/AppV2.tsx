@@ -146,7 +146,13 @@ const AppV2: React.FC = () => {
   }, []);
 
   const handleVoiceResult = useCallback((text: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    console.log('handleVoiceResult called with:', text);
+    console.log('WebSocket state:', wsRef.current?.readyState);
+
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket not connected');
+      return;
+    }
 
     setMessages(prev => [...prev, {
       role: 'user',
