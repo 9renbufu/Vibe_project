@@ -76,10 +76,12 @@ const AppV2: React.FC = () => {
   }, []);
 
   const handleMessage = useCallback((message: any) => {
+    console.log('Received message:', message);
     const { type, data } = message;
 
     switch (type) {
       case 'agent_response':
+        console.log('Agent response:', data);
         setIsProcessing(false);
         setMessages(prev => [...prev, {
           role: 'assistant',

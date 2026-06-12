@@ -16,6 +16,17 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   const [textInput, setTextInput] = useState('');
   const [isSupported, setIsSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const onResultRef = useRef(onResult);
+  const isListeningRef = useRef(isListening);
+
+  // 保持 onResult 和 isListening 的引用
+  useEffect(() => {
+    onResultRef.current = onResult;
+  }, [onResult]);
+
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -47,7 +58,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
         if (finalTranscript) {
           console.log('Final transcript, calling onResult:', finalTranscript);
-          onResult(finalTranscript);
+          onResultRef.current(finalTranscript);
           // 清空 transcript 显示
           setTimeout(() => setTranscript(''), 1000);
         }
@@ -61,7 +72,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       };
 
       recognition.onend = () => {
-        if (isListening) {
+        if (isListeningRef.current) {
           try {
             recognition.start();
           } catch (e) {
@@ -76,7 +87,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     return () => {
       recognitionRef.current?.abort();
     };
-  }, [onResult, isListening]);
+  }, []);
 
   const toggleListening = useCallback(() => {
     if (!recognitionRef.current) return;
