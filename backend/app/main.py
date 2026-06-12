@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from .scene_manager import SceneManager
-from .claude_handler import ClaudeHandler
+from .llm_handler import LLMHandler
 from .voice_processor import VoiceProcessor
 from .models import WebSocketMessage, VoiceCommand
 
@@ -26,13 +26,17 @@ app.add_middleware(
 )
 
 scene_manager = SceneManager()
-claude_handler = ClaudeHandler()
+llm_handler = LLMHandler()
 voice_processor = VoiceProcessor()
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "message": "VoiceSketch AI is running"}
+    return {
+        "status": "ok",
+        "message": "VoiceSketch AI is running",
+        "llm_provider": llm_handler.get_provider(),
+    }
 
 
 @app.get("/api/scene")
@@ -43,7 +47,7 @@ async def get_scene():
 @app.post("/api/scene/clear")
 async def clear_scene():
     scene_manager.clear_scene()
-    claude_handler.clear_history()
+    llm_handler.clear_history()
     return {"status": "cleared"}
 
 
@@ -64,7 +68,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 if processed["command_type"] == "clear":
                     scene_manager.clear_scene()
-                    claude_handler.clear_history()
+                    llm_handler.clear_history()
                     await websocket.send_json({
                         "type": "action",
                         "data": {
@@ -79,7 +83,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
 
                 scene_state = scene_manager.get_state().model_dump()
-                ai_response = await claude_handler.process_command(
+                ai_response = await llm_handler.process_command(
                     processed["corrected"], scene_state
                 )
 

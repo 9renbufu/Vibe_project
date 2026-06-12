@@ -24,7 +24,7 @@
 - FastAPI
 - WebSocket
 - Pydantic
-- Claude API (Anthropic)
+- 多 LLM 支持 (Claude / OpenAI / DeepSeek / 通义千问 / 智谱GLM / Moonshot / Ollama)
 
 ## 快速开始
 
@@ -33,7 +33,7 @@
 - Python 3.11+
 - Node.js 18+
 - Conda (推荐) 或 pip
-- Anthropic API Key
+- 任一 LLM API Key (可选，无 API 也能使用基础功能)
 
 ### 本地开发
 
@@ -56,7 +56,8 @@ pip install -r requirements.txt
 
 # 配置环境变量
 cp .env.example .env
-# 编辑 .env 文件，添加你的 ANTHROPIC_API_KEY
+# 编辑 .env 文件，配置 LLM API
+# 支持: claude, openai, deepseek, qwen, zhipu, moonshot, ollama
 
 # 启动后端
 uvicorn app.main:app --reload --port 8000
@@ -102,7 +103,7 @@ VoiceSketch_AI/
 │   │   ├── __init__.py
 │   │   ├── main.py          # FastAPI 主应用
 │   │   ├── models.py        # 数据模型
-│   │   ├── claude_handler.py # Claude API 调用
+│   │   ├── llm_handler.py    # 多 LLM 支持
 │   │   ├── scene_manager.py # 场景管理
 │   │   └── voice_processor.py # 语音处理
 │   ├── requirements.txt
@@ -126,6 +127,40 @@ VoiceSketch_AI/
 ├── docker-compose.yml
 └── README.md
 ```
+
+## LLM 配置
+
+在 `backend/.env` 文件中配置:
+
+```bash
+# 选择 LLM 提供商
+LLM_PROVIDER=openai  # 可选: claude, openai, deepseek, qwen, zhipu, moonshot, ollama
+
+# OpenAI (或兼容 API)
+OPENAI_API_KEY=your_key
+OPENAI_MODEL=gpt-4o
+
+# DeepSeek
+DEEPSEEK_API_KEY=your_key
+
+# 通义千问 (阿里云)
+DASHSCOPE_API_KEY=your_key
+
+# 智谱 GLM
+ZHIPU_API_KEY=your_key
+
+# Moonshot (月之暗面)
+MOONSHOT_API_KEY=your_key
+
+# Ollama (本地模型，无需 API Key)
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_MODEL=qwen2.5:7b
+```
+
+**推荐选择:**
+- 国内用户: DeepSeek / 通义千问 / 智谱 (速度快，价格低)
+- 本地部署: Ollama (免费，隐私好)
+- 海外用户: OpenAI / Claude (效果最好)
 
 ## API 端点
 
@@ -195,9 +230,9 @@ VoiceSketch_AI/
 ## 注意事项
 
 1. **浏览器要求**: 语音识别功能需要 Chrome 浏览器支持
-2. **API Key**: 使用 Claude AI 功能需要有效的 Anthropic API Key
+2. **LLM API**: 配置任一 LLM API 可获得完整功能，无 API 也能使用基础绘图
 3. **网络**: WebSocket 连接需要稳定的网络环境
-4. **无 Claude API**: 即使没有 API Key，应用也能使用内置的基础绘图功能
+4. **本地模型**: 使用 Ollama 可完全离线运行
 
 ## 故障排除
 
@@ -211,10 +246,11 @@ VoiceSketch_AI/
 - 确认端口 8000 未被占用
 - 检查防火墙设置
 
-### Claude API 错误
+### LLM API 错误
 - 验证 API Key 是否正确
 - 检查 API 额度是否充足
 - 查看后端日志获取详细错误信息
+- 确认 LLM_PROVIDER 设置正确
 
 ## 许可证
 
