@@ -170,6 +170,15 @@ const AppV2: React.FC = () => {
     }));
   }, []);
 
+  const handleClearChat = useCallback(() => {
+    setMessages([]);
+  }, []);
+
+  const handleClearCanvas = useCallback(() => {
+    setGeneratedImage(null);
+    setImagePrompt('');
+  }, []);
+
   const handleReset = useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
@@ -201,8 +210,14 @@ const AppV2: React.FC = () => {
           <span style={styles.statusText}>
             {connected ? '已连接' : '连接中...'}
           </span>
+          <button style={styles.clearButton} onClick={handleClearChat}>
+            清除对话
+          </button>
+          <button style={styles.clearButton} onClick={handleClearCanvas}>
+            清除画布
+          </button>
           <button style={styles.resetButton} onClick={handleReset}>
-            重新开始
+            全部重置
           </button>
         </div>
       </header>
@@ -288,7 +303,7 @@ const styles: Record<string, React.CSSProperties> = {
   statusText: {
     fontSize: '12px',
   },
-  resetButton: {
+  clearButton: {
     padding: '6px 12px',
     fontSize: '12px',
     border: '1px solid rgba(255,255,255,0.3)',
@@ -296,6 +311,16 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'rgba(255,255,255,0.1)',
     color: 'white',
     cursor: 'pointer',
+  },
+  resetButton: {
+    padding: '6px 12px',
+    fontSize: '12px',
+    border: '1px solid rgba(255,255,255,0.5)',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    color: 'white',
+    cursor: 'pointer',
+    fontWeight: '600',
   },
   main: {
     flex: 1,

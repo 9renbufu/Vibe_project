@@ -92,15 +92,21 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   const toggleListening = useCallback(() => {
     if (!recognitionRef.current) return;
 
-    if (isListening) {
+    if (isListeningRef.current) {
+      console.log('Stopping recognition...');
       recognitionRef.current.stop();
       setIsListening(false);
       setTranscript('');
     } else {
-      recognitionRef.current.start();
-      setIsListening(true);
+      console.log('Starting recognition...');
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (e) {
+        console.error('Failed to start recognition:', e);
+      }
     }
-  }, [isListening]);
+  }, []);
 
   const handleSendText = useCallback(() => {
     if (textInput.trim() && !isProcessing) {
