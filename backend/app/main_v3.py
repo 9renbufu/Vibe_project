@@ -115,8 +115,71 @@ async def handle_input(
     # 发送处理状态
     await websocket.send_json(create_status("processing", "正在理解您的需求..."))
 
+    # Step 1: Intent Analysis
+    await websocket.send_json({
+        "type": "step_update",
+        "data": {
+            "step": "intent",
+            "status": "running",
+            "name": "Requirement Analysis",
+        }
+    })
+
     # 通过 Pipeline 处理
     result = await pipeline.process_voice_input(text)
+
+    # 发送完成的步骤状态
+    await websocket.send_json({
+        "type": "step_update",
+        "data": {
+            "step": "intent",
+            "status": "completed",
+            "name": "Requirement Analysis",
+            "output": result.get("intent", {}).get("intent", ""),
+        }
+    })
+
+    # Step 2: Planning
+    await websocket.send_json({
+        "type": "step_update",
+        "data": {
+            "step": "plan",
+            "status": "completed",
+            "name": "Design Planning",
+            "output": result.get("plan", {}).get("name", ""),
+        }
+    })
+
+    # Step 3: Prompt Generation
+    await websocket.send_json({
+        "type": "step_update",
+        "data": {
+            "step": "prompt",
+            "status": "completed",
+            "name": "Prompt Generation",
+        }
+    })
+
+    # Step 4: Image Generation - 发送生成中状态
+    await websocket.send_json(create_status("generating", "正在生成图像，请稍候..."))
+    await websocket.send_json({
+        "type": "step_update",
+        "data": {
+            "step": "generate",
+            "status": "running",
+            "name": "Image Generation",
+        }
+    })
+
+    if result.get("image"):
+        await websocket.send_json({
+            "type": "step_update",
+            "data": {
+                "step": "generate",
+                "status": "completed",
+                "name": "Image Generation",
+            }
+        })
 
     # 发送 Agent 回复
     await websocket.send_json({

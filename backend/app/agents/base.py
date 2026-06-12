@@ -2,6 +2,7 @@
 Agent 基类
 """
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
@@ -29,22 +30,29 @@ class BaseAgent(ABC):
         """执行 Agent 任务"""
         pass
 
-    async def _call_llm(self, prompt: str, system_prompt: str = "") -> str:
-        """调用 LLM"""
+    async def _call_llm(self, prompt: str, system_prompt: str = "", retries: int = 2) -> str:
+        """调用 LLM，带重试"""
         if not self.llm:
             return ""
 
-        try:
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
 
-            response = await self.llm.chat(messages)
-            return response
-        except Exception as e:
-            print(f"[{self.name}] LLM Error: {e}")
-            return ""
+        for attempt in range(retries + 1):
+            try:
+                response = await self.llm.chat(messages)
+                if response:
+                    return response
+                print(f"[{self.name}] LLM returned empty response (attempt {attempt + 1})")
+            except Exception as e:
+                print(f"[{self.name}] LLM Error (attempt {attempt + 1}/{retries + 1}): {e}")
+
+            if attempt < retries:
+                await asyncio.sleep(1 * (attempt + 1))
+
+        return ""
 
     async def _call_llm_json(self, prompt: str, system_prompt: str = "") -> Dict[str, Any]:
         """调用 LLM 并解析 JSON 响应"""

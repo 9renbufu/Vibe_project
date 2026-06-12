@@ -3,6 +3,7 @@ LLM 客户端模块 - 支持多种大模型 API
 """
 
 import os
+import asyncio
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
 
@@ -20,11 +21,12 @@ class ClaudeClient(BaseLLMClient):
 
     def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
         from anthropic import Anthropic
-        self.client = Anthropic(api_key=api_key)
+        self.client = Anthropic(api_key=api_key, timeout=120.0)
         self.model = model
 
     async def chat(self, messages: List[Dict[str, str]], system: str = "") -> str:
-        response = self.client.messages.create(
+        response = await asyncio.to_thread(
+            self.client.messages.create,
             model=self.model,
             max_tokens=2000,
             system=system,
@@ -38,7 +40,12 @@ class OpenAICompatibleClient(BaseLLMClient):
 
     def __init__(self, api_key: str, model: str, base_url: str = None):
         from openai import OpenAI
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=120.0,
+            max_retries=2,
+        )
         self.model = model
 
     async def chat(self, messages: List[Dict[str, str]], system: str = "") -> str:
@@ -47,7 +54,8 @@ class OpenAICompatibleClient(BaseLLMClient):
             formatted.append({"role": "system", "content": system})
         formatted.extend(messages)
 
-        response = self.client.chat.completions.create(
+        response = await asyncio.to_thread(
+            self.client.chat.completions.create,
             model=self.model,
             messages=formatted,
             max_tokens=2000,

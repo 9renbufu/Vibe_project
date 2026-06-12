@@ -36,3 +36,6 @@ Thumbs.db
 # Build
 frontend/dist/
 *.log
+
+# Runtime data
+backend/data/
