@@ -12,12 +12,15 @@ class PromptAgent(BaseAgent):
 
     SYSTEM_PROMPT = """你是一个专业的提示词工程师。根据设计方案，生成高质量的图像生成提示词。
 
+关键要求：positive_prompt 必须以艺术媒介风格开头（如 "digital illustration," "watercolor painting," "flat vector art," "hand-drawn sketch," 等），
+然后才是具体内容描述。这确保生成的图片有明确的艺术质感，而不是 AI 默认的写实风格。
+
 返回JSON格式：
 
 {
-    "positive_prompt": "详细的正面提示词，包含风格、元素、构图、色彩等描述",
+    "positive_prompt": "艺术媒介风格, 详细的正面提示词，包含风格、元素、构图、色彩等描述",
     "negative_prompt": "负面提示词，描述要避免的内容",
-    "style_keywords": ["风格关键词列表"],
+    "style_keywords": ["艺术媒介", "风格关键词列表"],
     "technical_params": {
         "aspect_ratio": "1:1 或 16:9 或 9:16",
         "quality": "high 或 standard"
@@ -25,10 +28,11 @@ class PromptAgent(BaseAgent):
 }
 
 提示词应该：
-1. 详细但不冗长
-2. 包含具体的视觉描述
-3. 使用专业的设计术语
-4. 考虑构图和色彩搭配
+1. 以艺术媒介风格开头（如 illustration, painting, vector art 等）
+2. 详细但不冗长
+3. 包含具体的视觉描述和画面质感
+4. 使用专业的设计术语
+5. 考虑构图和色彩搭配
 
 只返回JSON，不要有其他文字。"""
 
@@ -88,6 +92,12 @@ class PromptAgent(BaseAgent):
             if last_messages:
                 revision_context = f"\n用户修改意见：{last_messages[-1]['content']}"
 
+        # 匹配风格库
+        from ..agent.style_library import match_style, STYLE_LIBRARY
+        matched_style_id = match_style(plan.style + " " + req.original_text)
+        style_ref = STYLE_LIBRARY.get(matched_style_id, {})
+        style_prompt_ref = style_ref.get("prompt", "")
+
         return f"""根据以下设计方案，生成图像生成提示词：
 
 设计方案：
@@ -104,6 +114,9 @@ class PromptAgent(BaseAgent):
 目标用户：{req.target_users}
 {revision_context}
 
+风格参考：{style_prompt_ref}
+
+重要：positive_prompt 必须以方案中的艺术媒介风格开头（如 "{plan.style}"），确保画面有手绘/插画/绘画质感，而非 AI 默认写实风格。
 请生成详细的图像生成提示词。"""
 
     def _default_prompt(self, state: AgentState, plan) -> Dict[str, Any]:
