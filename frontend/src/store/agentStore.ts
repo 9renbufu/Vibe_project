@@ -25,6 +25,7 @@ interface AgentStore extends AgentState {
   connected: boolean;
   thinkingLogs: ThinkingLog[];
   preferences: UserPreferences | null;
+  pendingInputs: string[];
 
   // Actions
   addMessage: (message: ChatMessage) => void;
@@ -50,6 +51,9 @@ interface AgentStore extends AgentState {
   addThinkingLog: (log: ThinkingLog) => void;
   clearThinkingLogs: () => void;
   setPreferences: (preferences: UserPreferences) => void;
+  addPendingInput: (text: string) => void;
+  shiftPendingInput: () => string | undefined;
+  clearPendingInputs: () => void;
   reset: () => void;
 }
 
@@ -94,6 +98,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   connected: false,
   thinkingLogs: [],
   preferences: null,
+  pendingInputs: [],
 
   // Actions
   addMessage: (message) =>
@@ -173,6 +178,18 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   setPreferences: (preferences) => set({ preferences }),
 
+  addPendingInput: (text) =>
+    set((state) => ({ pendingInputs: [...state.pendingInputs, text] })),
+
+  shiftPendingInput: () => {
+    const state = get();
+    const first = state.pendingInputs[0];
+    set({ pendingInputs: state.pendingInputs.slice(1) });
+    return first;
+  },
+
+  clearPendingInputs: () => set({ pendingInputs: [] }),
+
   reset: () =>
     set({
       currentTask: '',
@@ -191,5 +208,6 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       imagePrompt: '',
       thinkingLogs: [],
       preferences: null,
+      pendingInputs: [],
     }),
 }));

@@ -10,6 +10,7 @@ export const ConversationPanel: React.FC = () => {
     messages,
     isProcessing,
     connected,
+    pendingInputs,
   } = useAgentStore();
 
   const [inputText, setInputText] = useState('');
@@ -95,6 +96,19 @@ export const ConversationPanel: React.FC = () => {
     if (!text.trim()) return;
 
     const store = useAgentStore.getState();
+
+    // 如果正在处理中，加入队列
+    if (store.isProcessing) {
+      store.addPendingInput(text);
+      store.addMessage({
+        id: Date.now().toString(),
+        role: 'user',
+        content: text,
+        timestamp: new Date().toISOString(),
+        type: 'text',
+      });
+      return;
+    }
 
     store.addMessage({
       id: Date.now().toString(),
@@ -277,6 +291,21 @@ export const ConversationPanel: React.FC = () => {
           store.setIsProcessing(false);
           store.setIsThinking(false);
           store.setCurrentStep('');
+
+          // 自动发送队列中的下一条输入
+          setTimeout(() => {
+            const s = useAgentStore.getState();
+            const next = s.pendingInputs[0];
+            if (next && wsRef.current?.readyState === WebSocket.OPEN) {
+              s.shiftPendingInput();
+              s.setIsProcessing(true);
+              s.setCurrentTask(next);
+              wsRef.current.send(JSON.stringify({
+                type: 'voice_input',
+                data: { text: next },
+              }));
+            }
+          }, 500);
         }
         store.addMessage({
           id: Date.now().toString(),
@@ -517,15 +546,20 @@ export const ConversationPanel: React.FC = () => {
         {transcript && (
           <div style={styles.transcript}>{transcript}</div>
         )}
+        {pendingInputs.length > 0 && (
+          <div style={styles.pendingBadge}>
+            待发送: {pendingInputs.length} 条消息
+          </div>
+        )}
         <form style={styles.inputForm} onSubmit={handleSubmit}>
           <button
             type="button"
             onClick={toggleListening}
-            disabled={!isSupported || isProcessing}
+            disabled={!isSupported}
             style={{
               ...styles.micBtn,
               ...(isListening ? styles.micBtnActive : {}),
-              ...((!isSupported || isProcessing) ? styles.micBtnDisabled : {}),
+              ...(!isSupported ? styles.micBtnDisabled : {}),
             }}
           >
             {isListening ? '⏹' : ' '}
@@ -534,16 +568,15 @@ export const ConversationPanel: React.FC = () => {
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Describe your design..."
+            placeholder={isProcessing ? 'Generating... input will be queued' : 'Describe your design...'}
             style={styles.input}
-            disabled={isProcessing}
           />
           <button
             type="submit"
-            disabled={!inputText.trim() || isProcessing}
+            disabled={!inputText.trim()}
             style={{
               ...styles.sendBtn,
-              ...((!inputText.trim() || isProcessing) ? styles.sendBtnDisabled : {}),
+              ...(!inputText.trim() ? styles.sendBtnDisabled : {}),
             }}
           >
             ➤
@@ -767,5 +800,17 @@ const styles: Record<string, React.CSSProperties> = {
   sendBtnDisabled: {
     backgroundColor: '#d1d5db',
     cursor: 'not-allowed',
+  },
+  pendingBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '4px 10px',
+    marginBottom: '6px',
+    fontSize: '11px',
+    color: '#6366f1',
+    backgroundColor: '#eef2ff',
+    borderRadius: '12px',
+    cursor: 'default',
   },
 };
