@@ -206,9 +206,11 @@ class CriticAgent(BaseAgent):
         ]
         try:
             response = await self.vision.chat(messages)
+            if not response:
+                print(f"[CriticAgent] Vision 返回空响应")
             return response or ""
         except Exception as e:
-            print(f"[CriticAgent] Vision 评估失败: {e}")
+            print(f"[CriticAgent] Vision 评估失败: {type(e).__name__}: {e}")
             return ""
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
