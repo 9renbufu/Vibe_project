@@ -326,7 +326,7 @@ export const ConversationPanel: React.FC = () => {
             role: 'assistant',
             content: '评分较低，正在自动优化设计...',
             timestamp: new Date().toISOString(),
-            type: 'thinking',
+            type: 'text',
           });
         }
         // 处理评估数据
@@ -551,6 +551,26 @@ export const ConversationPanel: React.FC = () => {
             待发送: {pendingInputs.length} 条消息
           </div>
         )}
+        <div style={styles.styleTags}>
+          {[' ️插画', ' 水彩', '✏️手绘', '  扁平', '  像素', '  赛博'].map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              style={styles.styleTag}
+              onClick={() => setInputText((prev) => prev ? `${prev}，${tag.slice(2)}` : `请用${tag.slice(2)}风格设计`)}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#eef2ff';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = '#6366f1';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#f9fafb';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb';
+              }}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
         <form style={styles.inputForm} onSubmit={handleSubmit}>
           <button
             type="button"
@@ -568,7 +588,7 @@ export const ConversationPanel: React.FC = () => {
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder={isProcessing ? 'Generating... input will be queued' : 'Describe your design...'}
+            placeholder={isProcessing ? '生成中，输入将排队...' : '描述你的设计需求...'}
             style={styles.input}
           />
           <button
@@ -812,5 +832,22 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#eef2ff',
     borderRadius: '12px',
     cursor: 'default',
+  },
+  styleTags: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '6px',
+    marginBottom: '8px',
+  },
+  styleTag: {
+    padding: '4px 10px',
+    fontSize: '11px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '14px',
+    backgroundColor: '#f9fafb',
+    cursor: 'pointer',
+    color: '#4b5563',
+    transition: 'all 0.15s',
+    whiteSpace: 'nowrap',
   },
 };
