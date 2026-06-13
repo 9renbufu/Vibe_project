@@ -72,6 +72,7 @@ const defaultSteps: AgentStep[] = [
   { id: 'prompt', name: 'Prompt Generation', status: 'pending', icon: '✍️' },
   { id: 'generate', name: 'Image Generation', status: 'pending', icon: ' ' },
   { id: 'evaluate', name: 'Design Evaluation', status: 'pending', icon: ' ' },
+  { id: 'revision', name: 'Auto Optimization', status: 'pending', icon: ' ' },
 ];
 
 export const useAgentStore = create<AgentStore>((set, get) => ({
