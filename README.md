@@ -31,6 +31,10 @@ Agent Orchestrator (编排器)
 
 #### 2. 设计规划 (PlanningAgent)
 - 自动生成 3 个差异化设计方案
+- **艺术风格差异化**: 3 个方案各用不同艺术媒介风格
+  - 方案 1：插画风格（digital illustration）
+  - 方案 2：手绘/水彩风格（watercolor painting）
+  - 方案 3：扁平/矢量风格（flat vector design）
 - 每个方案包含: 名称、描述、风格、元素、配色、构图
 - 方案评分和推荐
 - 用户可选择方案进行生成
@@ -55,8 +59,9 @@ Agent Orchestrator (编排器)
   - `creativity` - 创意性
   - `commercial_value` - 商业价值
   - `visual_impact` - 视觉冲击力
+- **Vision 多模态评估**: 支持 GPT-4o 等视觉模型直接分析生成图片，给出更准确的评估
 - **具体优化建议** (如: 字体过细、色彩层级不足、品牌识别度不足)
-- **自动优化**: 评分低于阈值时自动重新生成
+- **自动优化**: 评分低于阈值时自动重新生成（最多 3 次）
 
 #### 6. 设计修改 (RevisionAgent)
 - 分析用户修改意见
@@ -75,6 +80,8 @@ Agent Orchestrator (编排器)
 
 #### 三栏布局
 - **左侧 - Conversation Panel**: 对话面板，支持语音和文本输入
+  - **输入队列**: 生成过程中可以继续录音或打字，输入自动排队，生成完成后自动发送
+  - **风格快捷标签**: 一键添加风格关键词（插画、水彩、手绘、扁平、像素、赛博）
 - **中间 - Design Workspace**: 设计画布，展示生成的图像
 - **右侧 - Agent Panel**: Agent 面板，展示思考过程和状态
 
@@ -110,6 +117,7 @@ Agent Orchestrator (编排器)
   - OpenAI DALL-E 3
   - 通义万相
   - 智谱 CogView
+- **Vision 多模态评估**: 支持 GPT-4o 等视觉模型进行图片评估
 
 ## 快速开始
 
@@ -153,6 +161,11 @@ DEEPSEEK_API_KEY=your_key
 # 图像生成配置 (选择一个)
 IMAGE_PROVIDER=qwen
 DASHSCOPE_API_KEY=your_key
+
+# Vision 模型配置 (可选，用于图片评估)
+VISION_API_KEY=your_key
+VISION_BASE_URL=https://api.openai.com/v1
+VISION_MODEL=gpt-4o
 ```
 
 ### 启动服务
