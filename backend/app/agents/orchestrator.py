@@ -221,7 +221,12 @@ class AgentOrchestrator:
 
     async def _auto_optimize(self, critic_data: Dict) -> Dict[str, Any]:
         """自动优化流程"""
+        if self.state.revision_count >= self.state.MAX_REVISIONS:
+            print(f"[Orchestrator] Max revisions ({self.state.MAX_REVISIONS}) reached, skipping auto-optimize")
+            return {"success": False}
+
         try:
+            self.state.revision_count += 1
             # 使用建议作为修改意见
             suggestions = critic_data.get("suggestions", [])
             feedback = critic_data.get("feedback", "")
@@ -274,9 +279,16 @@ class AgentOrchestrator:
             "data": {},
         }
 
+        # 检查修订次数限制
+        if self.state.revision_count >= self.state.MAX_REVISIONS:
+            result["response"] = f"已达最大修订次数（{self.state.MAX_REVISIONS}次），如需继续修改请重置会话。"
+            result["stage"] = "completed"
+            return result
+
         try:
+            self.state.revision_count += 1
             # 修改分析
-            await self._notify_thinking("RevisionAgent", f"正在分析用户修改意见: '{user_input}'")
+            await self._notify_thinking("RevisionAgent", f"正在分析用户修改意见: '{user_input}'（第{self.state.revision_count}次修订）")
             await self._notify_stage_change("revising", {"feedback": user_input})
             self.state.stage = DesignStage.REVISING
 
@@ -455,3 +467,4 @@ class AgentOrchestrator:
     def reset(self):
         """重置状态"""
         self.state = AgentState()
+        self.state.revision_count = 0

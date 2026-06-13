@@ -90,6 +90,8 @@ class AgentState:
     conversation_history: List[Dict[str, Any]] = field(default_factory=list)
     memory: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
+    revision_count: int = 0
+    MAX_REVISIONS: int = 3
 
     def add_message(self, role: str, content: str):
         """添加对话历史"""
@@ -166,4 +168,5 @@ class AgentState:
                 "suggestions": self.evaluation.suggestions,
             } if self.evaluation else None,
             "memory": self.memory,
+            "revision_count": self.revision_count,
         }

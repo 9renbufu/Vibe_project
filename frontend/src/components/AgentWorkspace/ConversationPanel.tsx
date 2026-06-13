@@ -218,7 +218,7 @@ export const ConversationPanel: React.FC = () => {
           'prompt': 'prompt',
           'generating': 'generate',
           'evaluating': 'evaluate',
-          'revising': 'prompt',
+          'revising': 'revision',
         };
         const stepId = stageStepMap[stage];
         if (stepId) {
@@ -235,7 +235,7 @@ export const ConversationPanel: React.FC = () => {
           'PromptAgent': 'prompt',
           'GenerationAgent': 'generate',
           'CriticAgent': 'evaluate',
-          'RevisionAgent': 'prompt',
+          'RevisionAgent': 'revision',
         };
         const agentStepId = agentStepMap[agentName];
         if (agentStepId) {
@@ -272,9 +272,12 @@ export const ConversationPanel: React.FC = () => {
         break;
 
       case 'agent_response':
-        store.setIsProcessing(false);
-        store.setIsThinking(false);
-        store.setCurrentStep('');
+        // 自动优化中不关闭处理状态
+        if (!message.data.data?.auto_optimizing) {
+          store.setIsProcessing(false);
+          store.setIsThinking(false);
+          store.setCurrentStep('');
+        }
         store.addMessage({
           id: Date.now().toString(),
           role: 'assistant',
@@ -285,6 +288,17 @@ export const ConversationPanel: React.FC = () => {
         // 更新 phase
         if (message.data.stage) {
           store.setPhase(message.data.stage);
+        }
+        // 自动优化提示
+        if (message.data.data?.auto_optimizing) {
+          store.updateStep('revision', { status: 'running' });
+          store.addMessage({
+            id: Date.now().toString() + '-opt',
+            role: 'assistant',
+            content: '评分较低，正在自动优化设计...',
+            timestamp: new Date().toISOString(),
+            type: 'thinking',
+          });
         }
         // 处理评估数据
         if (message.data.data?.evaluation) {

@@ -35,9 +35,19 @@ app.add_middleware(
 # 初始化组件
 llm_client = LLMClientFactory.create()
 image_generator = ImageGeneratorFactory.create()
+shared_memory_agent = None  # 延迟初始化，与 WebSocket 会话共享
 
 print(f"LLM Available: {llm_client is not None}")
 print(f"Image Generator Available: {image_generator is not None}")
+
+
+def _get_memory_agent():
+    """获取共享的记忆 Agent 单例"""
+    global shared_memory_agent
+    if shared_memory_agent is None:
+        from .agents.memory import DesignMemoryAgent
+        shared_memory_agent = DesignMemoryAgent(llm_client)
+    return shared_memory_agent
 
 
 @app.get("/api/health")
@@ -53,8 +63,7 @@ async def health():
 @app.get("/api/memory/preferences")
 async def get_preferences():
     """获取用户设计偏好"""
-    from .agents.memory import DesignMemoryAgent
-    memory_agent = DesignMemoryAgent(llm_client)
+    memory_agent = _get_memory_agent()
     result = await memory_agent.execute(None, action="query", query_type="preferences")
     return result.data
 
@@ -62,8 +71,7 @@ async def get_preferences():
 @app.get("/api/memory/history")
 async def get_history(limit: int = 50):
     """获取设计历史"""
-    from .agents.memory import DesignMemoryAgent
-    memory_agent = DesignMemoryAgent(llm_client)
+    memory_agent = _get_memory_agent()
     result = await memory_agent.execute(None, action="query", query_type="history")
     history = result.data.get("history", [])
     return {"history": history[-limit:]}
@@ -72,8 +80,7 @@ async def get_history(limit: int = 50):
 @app.get("/api/memory/stats")
 async def get_stats():
     """获取记忆统计"""
-    from .agents.memory import DesignMemoryAgent
-    memory_agent = DesignMemoryAgent(llm_client)
+    memory_agent = _get_memory_agent()
     result = await memory_agent.execute(None, action="analyze")
     return result.data
 
@@ -83,11 +90,13 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("Client connected")
 
-    # 每个连接创建独立的 Orchestrator
+    # 每个连接创建独立的 Orchestrator，共享记忆模块
+    memory_agent = _get_memory_agent()
     orchestrator = AgentOrchestrator(
         llm_client=llm_client,
         image_generator=image_generator,
     )
+    orchestrator.memory_agent = memory_agent
 
     # 设置回调函数
     async def on_stage_change(stage: str, data: dict):
