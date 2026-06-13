@@ -68,8 +68,26 @@ class CriticAgent(BaseAgent):
             # 构建评估提示
             prompt = self._build_prompt(state)
 
-            # 调用 LLM 评估
-            result = await self._call_llm_json(prompt, self.SYSTEM_PROMPT)
+            # 优先使用图片进行多模态评估
+            image_base64 = current_version.image_base64
+            if image_base64:
+                response = await self._call_llm_with_image(prompt, image_base64, self.SYSTEM_PROMPT)
+                import json
+                try:
+                    cleaned = response.strip()
+                    if cleaned.startswith("```"):
+                        lines = cleaned.split("\n")
+                        cleaned = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+                    result = json.loads(cleaned)
+                except (json.JSONDecodeError, Exception):
+                    try:
+                        start = response.find("{")
+                        end = response.rfind("}") + 1
+                        result = json.loads(response[start:end]) if start >= 0 and end > start else {}
+                    except:
+                        result = {}
+            else:
+                result = await self._call_llm_json(prompt, self.SYSTEM_PROMPT)
 
             if not result or "overall" not in result:
                 # 使用默认评估

@@ -54,6 +54,42 @@ class BaseAgent(ABC):
 
         return ""
 
+    async def _call_llm_with_image(self, prompt: str, image_base64: str, system_prompt: str = "", retries: int = 2) -> str:
+        """调用 LLM，支持图片输入（多模态）"""
+        if not self.llm:
+            return ""
+
+        # 构建多模态消息
+        content = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+            },
+        ]
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": content})
+
+        for attempt in range(retries + 1):
+            try:
+                response = await self.llm.chat(messages)
+                if response:
+                    return response
+                print(f"[{self.name}] LLM Vision returned empty (attempt {attempt + 1})")
+            except Exception as e:
+                print(f"[{self.name}] LLM Vision Error (attempt {attempt + 1}/{retries + 1}): {e}")
+                # 如果多模态失败，回退到纯文本
+                if attempt == 0:
+                    print(f"[{self.name}] Falling back to text-only evaluation")
+                    return await self._call_llm(prompt, system_prompt, retries=1)
+
+            if attempt < retries:
+                await asyncio.sleep(1 * (attempt + 1))
+
+        return ""
+
     async def _call_llm_json(self, prompt: str, system_prompt: str = "") -> Dict[str, Any]:
         """调用 LLM 并解析 JSON 响应"""
         import json
