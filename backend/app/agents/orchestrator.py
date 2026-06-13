@@ -18,16 +18,17 @@ from .memory import DesignMemoryAgent
 class AgentOrchestrator:
     """Agent 编排器"""
 
-    def __init__(self, llm_client=None, image_generator=None):
+    def __init__(self, llm_client=None, image_generator=None, vision_client=None):
         self.llm = llm_client
         self.image_gen = image_generator
+        self.vision_client = vision_client
 
         # 初始化所有 Agent
         self.requirement_agent = RequirementAgent(llm_client)
         self.planning_agent = PlanningAgent(llm_client)
         self.prompt_agent = PromptAgent(llm_client)
         self.generation_agent = GenerationAgent(llm_client, image_generator)
-        self.critic_agent = CriticAgent(llm_client)
+        self.critic_agent = CriticAgent(llm_client, vision_client)
         self.revision_agent = RevisionAgent(llm_client)
         self.memory_agent = DesignMemoryAgent(llm_client)
 
