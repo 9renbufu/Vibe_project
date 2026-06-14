@@ -11,6 +11,10 @@ from .state import AgentState, DesignStage, Evaluation
 class CriticAgent(BaseAgent):
     """设计评估 Agent - 评估生成的设计质量"""
 
+    def __init__(self, llm_client=None, vision_client=None):
+        super().__init__(llm_client)
+        self.vision = vision_client
+
     SYSTEM_PROMPT = """你是一个专业的设计评估Agent。你的任务是全面评估生成的设计质量。
 
 评估维度（每项0-100分）：
@@ -67,25 +71,17 @@ class CriticAgent(BaseAgent):
 
             # 构建评估提示
             prompt = self._build_prompt(state)
-
-            # 优先使用图片进行多模态评估
             image_base64 = current_version.image_base64
-            if image_base64:
-                response = await self._call_llm_with_image(prompt, image_base64, self.SYSTEM_PROMPT)
-                import json
-                try:
-                    cleaned = response.strip()
-                    if cleaned.startswith("```"):
-                        lines = cleaned.split("\n")
-                        cleaned = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-                    result = json.loads(cleaned)
-                except (json.JSONDecodeError, Exception):
-                    try:
-                        start = response.find("{")
-                        end = response.rfind("}") + 1
-                        result = json.loads(response[start:end]) if start >= 0 and end > start else {}
-                    except:
-                        result = {}
+
+            # 优先使用 vision 模型进行图片评估
+            if image_base64 and self.vision:
+                print(f"[CriticAgent] 使用 Vision 模型进行图片评估")
+                response = await self._call_vision(prompt, image_base64)
+                result = self._parse_json_response(response)
+            elif image_base64:
+                # 没有 vision 模型，尝试主 LLM（可能不支持图片）
+                print(f"[CriticAgent] 无 Vision 模型，使用纯文本评估")
+                result = await self._call_llm_json(prompt, self.SYSTEM_PROMPT)
             else:
                 result = await self._call_llm_json(prompt, self.SYSTEM_PROMPT)
 
@@ -197,6 +193,46 @@ class CriticAgent(BaseAgent):
 
 请从品牌一致性、创意性、商业价值、视觉冲击力四个维度进行详细评估，
 并给出具体的优化建议（如：字体过细、色彩层级不足、品牌识别度不足等）。"""
+
+    async def _call_vision(self, prompt: str, image_base64: str) -> str:
+        """使用 vision 模型进行图片评估"""
+        content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
+        ]
+        messages = [
+            {"role": "system", "content": self.SYSTEM_PROMPT},
+            {"role": "user", "content": content},
+        ]
+        try:
+            response = await self.vision.chat(messages)
+            if not response:
+                print(f"[CriticAgent] Vision 返回空响应")
+            return response or ""
+        except Exception as e:
+            print(f"[CriticAgent] Vision 评估失败: {type(e).__name__}: {e}")
+            return ""
+
+    def _parse_json_response(self, response: str) -> Dict[str, Any]:
+        """解析 LLM 返回的 JSON"""
+        import json
+        if not response:
+            return {}
+        try:
+            cleaned = response.strip()
+            if cleaned.startswith("```"):
+                lines = cleaned.split("\n")
+                cleaned = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+            return json.loads(cleaned)
+        except (json.JSONDecodeError, Exception):
+            try:
+                start = response.find("{")
+                end = response.rfind("}") + 1
+                if start >= 0 and end > start:
+                    return json.loads(response[start:end])
+            except:
+                pass
+            return {}
 
     def _default_evaluation(self, state: AgentState) -> Dict[str, Any]:
         """默认评估（LLM不可用时）"""

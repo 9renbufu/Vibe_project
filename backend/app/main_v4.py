@@ -34,10 +34,12 @@ app.add_middleware(
 
 # 初始化组件
 llm_client = LLMClientFactory.create()
+vision_client = LLMClientFactory.create_vision()
 image_generator = ImageGeneratorFactory.create()
 shared_memory_agent = None  # 延迟初始化，与 WebSocket 会话共享
 
 print(f"LLM Available: {llm_client is not None}")
+print(f"Vision LLM Available: {vision_client is not None}")
 print(f"Image Generator Available: {image_generator is not None}")
 
 
@@ -56,6 +58,7 @@ async def health():
         "status": "ok",
         "version": "4.0.0",
         "llm_available": llm_client is not None,
+        "vision_available": vision_client is not None,
         "image_available": image_generator is not None,
     }
 
@@ -95,6 +98,7 @@ async def websocket_endpoint(websocket: WebSocket):
     orchestrator = AgentOrchestrator(
         llm_client=llm_client,
         image_generator=image_generator,
+        vision_client=vision_client,
     )
     orchestrator.memory_agent = memory_agent
 

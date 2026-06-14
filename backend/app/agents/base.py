@@ -54,8 +54,8 @@ class BaseAgent(ABC):
 
         return ""
 
-    async def _call_llm_with_image(self, prompt: str, image_base64: str, system_prompt: str = "", retries: int = 2) -> str:
-        """调用 LLM，支持图片输入（多模态）"""
+    async def _call_llm_with_image(self, prompt: str, image_base64: str, system_prompt: str = "") -> str:
+        """调用 LLM，支持图片输入（多模态）。不支持时自动回退纯文本。"""
         if not self.llm:
             return ""
 
@@ -72,23 +72,20 @@ class BaseAgent(ABC):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": content})
 
-        for attempt in range(retries + 1):
-            try:
-                response = await self.llm.chat(messages)
-                if response:
-                    return response
-                print(f"[{self.name}] LLM Vision returned empty (attempt {attempt + 1})")
-            except Exception as e:
-                print(f"[{self.name}] LLM Vision Error (attempt {attempt + 1}/{retries + 1}): {e}")
-                # 如果多模态失败，回退到纯文本
-                if attempt == 0:
-                    print(f"[{self.name}] Falling back to text-only evaluation")
-                    return await self._call_llm(prompt, system_prompt, retries=1)
+        try:
+            response = await self.llm.chat(messages)
+            if response:
+                return response
+        except Exception as e:
+            err_msg = str(e)
+            # 400 错误说明模型不支持图片，直接回退，不重试
+            if "400" in err_msg or "image_url" in err_msg or "unknown variant" in err_msg:
+                print(f"[{self.name}] LLM 不支持图片输入，回退到纯文本评估")
+            else:
+                print(f"[{self.name}] LLM Vision Error: {e}")
 
-            if attempt < retries:
-                await asyncio.sleep(1 * (attempt + 1))
-
-        return ""
+        # 回退到纯文本
+        return await self._call_llm(prompt, system_prompt, retries=1)
 
     async def _call_llm_json(self, prompt: str, system_prompt: str = "") -> Dict[str, Any]:
         """调用 LLM 并解析 JSON 响应"""

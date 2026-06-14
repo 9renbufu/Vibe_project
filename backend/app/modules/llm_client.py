@@ -131,3 +131,16 @@ class LLMClientFactory:
             )
 
         return None
+
+    @staticmethod
+    def create_vision() -> Optional[BaseLLMClient]:
+        """创建视觉评估专用客户端（支持图片输入的模型）"""
+        api_key = os.getenv("VISION_API_KEY")
+        if not api_key:
+            return None
+
+        base_url = os.getenv("VISION_BASE_URL", "https://api.openai.com/v1")
+        model = os.getenv("VISION_MODEL", "gpt-4o")
+
+        print(f"Vision LLM: {model} @ {base_url}")
+        return OpenAICompatibleClient(api_key, model, base_url)
