@@ -199,110 +199,140 @@ class DrawingWSHandler:
 
         parsed = parse_command(text)
 
-        # 低置信度时用 LLM 纠错
-        llm_corrected = False
-        corrected_text = ""
-        if self.agent and (parsed.confidence < 0.7 or parsed.command_type == CommandType.UNKNOWN):
-            try:
-                corrected_text = await self.agent.correct_command(text, parsed.confidence)
-                if corrected_text and corrected_text != text:
-                    reparsed = parse_command(corrected_text)
-                    if reparsed.command_type != CommandType.UNKNOWN and reparsed.confidence > parsed.confidence:
-                        parsed = reparsed
-                        llm_corrected = True
-            except Exception:
-                pass
-
         session.command_history.append({
             "text": text,
             "type": parsed.command_type.value,
             "confidence": parsed.confidence,
-            "llm_corrected": llm_corrected,
         })
 
-        response_text = f"理解为: {corrected_text}" if llm_corrected else ""
+        response_text = ""
         all_instructions = []
         error = False
 
-        # 复合指令：收集所有子指令的结果
-        compound_parts = parsed.params.get("compound_parts", [])
+        # LLM 作为绘图大脑：当规则引擎无法处理时，用 LLM 理解意图并生成绘图指令
+        llm_generated = False
+        if self.agent and (parsed.command_type == CommandType.UNKNOWN or parsed.confidence < 0.5):
+            try:
+                llm_result = await self.agent.understand_and_generate(text)
+                commands = llm_result.get("commands", [])
 
-        try:
-            if parsed.command_type == CommandType.DRAW_SHAPE:
-                all_instructions = engine.draw_shape(
-                    shape_type=parsed.shape_type or "circle",
-                    color=parsed.color,
-                    size=parsed.size,
-                    position=parsed.position,
-                )
-                response_text = f"已绘制 {parsed.shape_type or '圆形'}"
+                if commands:
+                    # LLM 生成了指令序列，逐条执行
+                    llm_generated = True
+                    response_text = llm_result.get("understood", "已理解你的意图")
+                    for cmd in commands:
+                        try:
+                            sub_parsed = parse_command(cmd)
+                            if sub_parsed.command_type != CommandType.UNKNOWN:
+                                sub_insts = await self._execute_single(engine, sub_parsed)
+                                all_instructions.extend(sub_insts)
+                        except Exception:
+                            pass
+                elif llm_result.get("fallback"):
+                    # LLM 也无法处理，画个默认图案 + 友好提示
+                    all_instructions = engine.draw_shape(
+                        shape_type="circle",
+                        color=(200, 180, 255),
+                        size=120,
+                        position=(0.5, 0.5),
+                    )
+                    all_instructions.extend(engine.draw_shape(
+                        shape_type="star",
+                        color=(255, 220, 100),
+                        size=60,
+                        position=(0.35, 0.35),
+                    ))
+                    all_instructions.extend(engine.draw_shape(
+                        shape_type="heart",
+                        color=(255, 150, 180),
+                        size=50,
+                        position=(0.65, 0.6),
+                    ))
+                    response_text = f"我暂时画不出「{text}」，但我画了一个小图案给你。试试说「画一个日落」或「画一棵树」？"
+            except Exception:
+                pass
 
-            elif parsed.command_type == CommandType.DRAW_ART:
-                art_type = parsed.art_type or "flow_field"
-                engine_method = getattr(engine, f"generate_{art_type}", None)
-                if engine_method:
-                    all_instructions = await asyncio.to_thread(engine_method, {"color": parsed.color, "append": True})
-                    art_names = {
-                        "flow_field": "流场", "fractal_tree": "分形树", "watercolor": "水彩",
-                        "mandala": "曼陀罗", "spirograph": "螺线", "voronoi": "沃罗诺伊",
-                        "particle": "粒子", "wave": "波浪", "stripe": "条纹", "gradient": "渐变",
+        # 如果 LLM 没有处理，走规则引擎路径
+        if not llm_generated:
+            # 复合指令：收集所有子指令的结果
+            compound_parts = parsed.params.get("compound_parts", [])
+
+            try:
+                if parsed.command_type == CommandType.DRAW_SHAPE:
+                    all_instructions = engine.draw_shape(
+                        shape_type=parsed.shape_type or "circle",
+                        color=parsed.color,
+                        size=parsed.size,
+                        position=parsed.position,
+                    )
+                    response_text = f"已绘制 {parsed.shape_type or '圆形'}"
+
+                elif parsed.command_type == CommandType.DRAW_ART:
+                    art_type = parsed.art_type or "flow_field"
+                    engine_method = getattr(engine, f"generate_{art_type}", None)
+                    if engine_method:
+                        all_instructions = await asyncio.to_thread(engine_method, {"color": parsed.color, "append": True})
+                        art_names = {
+                            "flow_field": "流场", "fractal_tree": "分形树", "watercolor": "水彩",
+                            "mandala": "曼陀罗", "spirograph": "螺线", "voronoi": "沃罗诺伊",
+                            "particle": "粒子", "wave": "波浪", "stripe": "条纹", "gradient": "渐变",
+                        }
+                        response_text = f"已生成 {art_names.get(art_type, art_type)} 艺术"
+                    else:
+                        response_text = f"暂不支持 {art_type} 类型"
+                        error = True
+
+                elif parsed.command_type == CommandType.DRAW_SCENE:
+                    scene_type = parsed.scene_type or "sunset"
+                    all_instructions = await asyncio.to_thread(
+                        engine.generate_landscape, scene_type, {"color": parsed.color, "append": True}
+                    )
+                    scene_names = {
+                        "sunset": "日落", "ocean": "海洋", "mountain": "山脉",
+                        "starry_sky": "星空", "forest": "森林", "grassland": "草原",
+                        "desert": "沙漠", "snow": "雪景", "spring": "春天花海",
                     }
-                    response_text = f"已生成 {art_names.get(art_type, art_type)} 艺术"
+                    response_text = f"已绘制 {scene_names.get(scene_type, scene_type)} 风景"
+
+                elif parsed.command_type == CommandType.SET_COLOR:
+                    engine.current_color = parsed.color or (50, 50, 50)
+                    response_text = f"颜色已更改为 RGB{parsed.color or (50, 50, 50)}"
+
+                elif parsed.command_type == CommandType.SET_SIZE:
+                    engine.current_size = parsed.size or 80
+                    response_text = f"大小已更改为 {parsed.size or 80}"
+
+                elif parsed.command_type == CommandType.UNDO:
+                    all_instructions = engine.undo()
+                    response_text = "已撤销"
+
+                elif parsed.command_type == CommandType.REDO:
+                    all_instructions = engine.redo()
+                    response_text = "已重做"
+
+                elif parsed.command_type == CommandType.CLEAR:
+                    all_instructions = engine.clear()
+                    response_text = "画布已清空"
+
                 else:
-                    response_text = f"暂不支持 {art_type} 类型"
+                    response_text = f"未识别指令: {text}，请重试"
                     error = True
 
-            elif parsed.command_type == CommandType.DRAW_SCENE:
-                scene_type = parsed.scene_type or "sunset"
-                all_instructions = await asyncio.to_thread(
-                    engine.generate_landscape, scene_type, {"color": parsed.color, "append": True}
-                )
-                scene_names = {
-                    "sunset": "日落", "ocean": "海洋", "mountain": "山脉",
-                    "starry_sky": "星空", "forest": "森林", "grassland": "草原",
-                    "desert": "沙漠", "snow": "雪景", "spring": "春天花海",
-                }
-                response_text = f"已绘制 {scene_names.get(scene_type, scene_type)} 风景"
-
-            elif parsed.command_type == CommandType.SET_COLOR:
-                engine.current_color = parsed.color or (50, 50, 50)
-                response_text = f"颜色已更改为 RGB{parsed.color or (50, 50, 50)}"
-
-            elif parsed.command_type == CommandType.SET_SIZE:
-                engine.current_size = parsed.size or 80
-                response_text = f"大小已更改为 {parsed.size or 80}"
-
-            elif parsed.command_type == CommandType.UNDO:
-                all_instructions = engine.undo()
-                response_text = "已撤销"
-
-            elif parsed.command_type == CommandType.REDO:
-                all_instructions = engine.redo()
-                response_text = "已重做"
-
-            elif parsed.command_type == CommandType.CLEAR:
-                all_instructions = engine.clear()
-                response_text = "画布已清空"
-
-            else:
-                response_text = f"未识别指令: {text}，请重试"
+            except Exception as e:
+                response_text = f"执行出错: {str(e)}"
                 error = True
 
-        except Exception as e:
-            response_text = f"执行出错: {str(e)}"
-            error = True
-
-        # 执行复合指令的后续部分
-        if not error and compound_parts:
-            for part in compound_parts:
-                try:
-                    sub_parsed = parse_command(part)
-                    sub_insts = await self._execute_single(engine, sub_parsed)
-                    all_instructions.extend(sub_insts)
-                    if sub_parsed.command_type != CommandType.UNKNOWN:
-                        response_text += f"，然后{self._describe_command(sub_parsed)}"
-                except Exception:
-                    pass
+            # 执行复合指令的后续部分
+            if not error and compound_parts:
+                for part in compound_parts:
+                    try:
+                        sub_parsed = parse_command(part)
+                        sub_insts = await self._execute_single(engine, sub_parsed)
+                        all_instructions.extend(sub_insts)
+                        if sub_parsed.command_type != CommandType.UNKNOWN:
+                            response_text += f"，然后{self._describe_command(sub_parsed)}"
+                    except Exception:
+                        pass
 
         if not error:
             session.update_preferences(parsed)
