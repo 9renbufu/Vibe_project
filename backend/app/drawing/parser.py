@@ -272,7 +272,7 @@ def _extract_direction(text: str) -> Optional[str]:
 
 def _has_draw_intent(text: str) -> bool:
     """检测是否包含绘图意图动词"""
-    return bool(re.search(r'画|创建|来|做|生成|画一幅|画一个|画个|画条|画根|花一个|话一个', text))
+    return bool(re.search(r'画|创建|来|做|生成|加|添|增加|再来|花一个|话一个', text))
 
 
 def _split_compound(text: str) -> List[str]:

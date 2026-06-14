@@ -213,7 +213,9 @@ class DrawingWSHandler:
         llm_generated = False
         if self.agent and (parsed.command_type == CommandType.UNKNOWN or parsed.confidence < 0.5):
             try:
-                llm_result = await self.agent.understand_and_generate(text)
+                # 构建画布上下文，让 LLM 知道已有内容
+                canvas_ctx = self._build_canvas_context(engine)
+                llm_result = await self.agent.understand_and_generate(text, canvas_ctx)
                 commands = llm_result.get("commands", [])
                 shapes = llm_result.get("shapes", [])
 
@@ -753,6 +755,32 @@ class DrawingWSHandler:
             return "清空了画布"
 
         return ""
+
+    def _build_canvas_context(self, engine: DrawingEngine) -> str:
+        """构建画布上下文描述，让 LLM 知道已有内容"""
+        shapes = engine.shapes
+        if not shapes:
+            return "空画布"
+
+        # 统计各类型图形
+        type_count: Dict[str, int] = {}
+        colors_seen = set()
+        for s in shapes:
+            stype = s.get("type", "unknown")
+            type_count[stype] = type_count.get(stype, 0) + 1
+            fill = s.get("fill", "")
+            if fill and "rgb" in str(fill):
+                colors_seen.add(str(fill)[:20])
+
+        parts = [f"{t}x{c}" for t, c in type_count.items()]
+        summary = f"共{len(shapes)}个图形: {', '.join(parts[:8])}"
+
+        # 背景色
+        bg = engine.background
+        if bg and bg != (255, 255, 255):
+            summary += f", 背景rgb{bg}"
+
+        return summary
 
     async def _handle_command(self, session: DrawingSession, text: str) -> dict:
         """非流式处理（备用）"""

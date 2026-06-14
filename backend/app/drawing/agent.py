@@ -20,12 +20,19 @@ class DrawingAgent:
 
     # ============ 理解任意意图，生成绘图指令 ============
 
-    async def understand_and_generate(self, user_text: str) -> dict:
+    async def understand_and_generate(self, user_text: str, canvas_context: str = "") -> dict:
         """理解任意用户意图，生成结构化绘图数据"""
         if not self.llm:
             return {"understood": "", "commands": [], "shapes": [], "fallback": True}
 
-        prompt = f"""用户说: "{user_text}"
+        context_hint = ""
+        if canvas_context:
+            context_hint = f"""
+
+当前画布上已有：{canvas_context}
+注意：用户要求在现有画布上添加内容，请只生成新增的部分，不要重复已有的内容。"""
+
+        prompt = f"""用户说: "{user_text}"{context_hint}
 
 请将用户的描述转换为绘图数据。返回 JSON，包含场景指令和结构化图形：
 
