@@ -14,6 +14,10 @@ export default defineConfig({
         target: 'ws://localhost:8000',
         ws: true,
       },
+      '/ws/draw': {
+        target: 'ws://localhost:8000',
+        ws: true,
+      },
     },
   },
 })
