@@ -21,51 +21,79 @@ class DrawingAgent:
     # ============ 理解任意意图，生成绘图指令 ============
 
     async def understand_and_generate(self, user_text: str) -> dict:
-        """理解任意用户意图，生成绘图指令序列"""
+        """理解任意用户意图，生成结构化绘图数据"""
         if not self.llm:
-            return {"understood": "", "commands": [], "fallback": True}
+            return {"understood": "", "commands": [], "shapes": [], "fallback": True}
 
         prompt = f"""用户说: "{user_text}"
 
-请将用户的描述转换为绘图指令序列。用基础图形组合来表达用户的意思。
+请将用户的描述转换为绘图数据。返回 JSON，包含场景指令和结构化图形：
 
-返回 JSON：
 {{
-  "understood": "用户意图的理解",
-  "commands": ["指令1", "指令2", ...],
+  "understood": "你对用户意图的理解",
+  "commands": ["场景或艺术指令，如 画星空、画海洋、画分形树"],
+  "shapes": [
+    {{"shape": "circle", "color": [255, 200, 0], "size": 120, "position": [0.8, 0.2], "label": "太阳"}},
+    {{"shape": "rectangle", "color": [139, 90, 43], "size": 160, "position": [0.5, 0.6], "label": "墙"}},
+    {{"shape": "triangle", "color": [220, 50, 50], "size": 140, "position": [0.5, 0.35], "label": "屋顶"}}
+  ],
   "fallback": false
 }}
 
-可用的绘图指令：
-- "画一个[颜色]的圆" / "画一个[颜色]的矩形" / "画一个[颜色]的三角形"
-- "画一个[颜色]的星形" / "画一个[颜色]的爱心" / "画一个[颜色]的椭圆"
-- "画一条[颜色]的线"
-- "画流场" / "画分形树" / "画水彩" / "画曼陀罗" / "画螺线" / "画沃罗诺伊" / "画粒子" / "画波浪"
-- "画日落" / "画海洋" / "画山脉" / "画星空" / "画森林" / "画雪景"
-- "在[位置]画" (位置: 中间/左上/右上/左下/右下/上面/下面)
-- "[颜色]大圆" / "[颜色]小圆" (大小: 大/中/小)
+shape 类型（必须是以下之一）：
+- circle（圆）、rectangle（矩形）、triangle（三角形）、star（五角星）、heart（爱心）、ellipse（椭圆）、line（线条）
+
+参数格式：
+- color: RGB 数组 [r, g, b]，值 0-255
+- size: 像素大小，建议 40-250
+- position: 归一化坐标 [x, y]，0-1 之间。0.5=中心, 0.2=偏左/上, 0.8=偏右/下
+
+commands 可用的场景/艺术指令：
+- 画星空、画日落、画海洋、画山脉、画森林、画雪景、画春天
+- 画流场、画分形树、画水彩、画曼陀罗、画螺线、画沃罗诺伊、画粒子、画波浪
 
 创作规则：
-1. 用基础几何图形组合来表达复杂事物
-2. 每个指令必须是可执行的绘图命令
-3. 通过颜色、大小、位置的组合来表达细节
+1. 用多个基础图形组合来表达复杂事物，每个部件一个 shape
+2. 通过不同颜色、大小、位置表达细节（如眼睛、耳朵等部件）
+3. 先用 commands 画背景/场景，再用 shapes 画主体
 4. 如果完全无法用图形表达，设 fallback=true
 
-示例：
-- "画一个太空人" → 画星空 + 在中间画一个灰色大矩形(身体) + 在上面画一个白色大圆(头盔) + 画一个小黑色圆(面罩)
-- "画一只猫" → 在中间画一个橙色大圆(脸) + 画两个橙色小三角形(耳朵) + 画两个小黑色圆(眼睛) + 画一个小粉色圆(鼻子)
-- "画一个太阳" → 在右上角画一个金黄色大圆
-- "画一座房子" → 在中间画一个棕色大矩形(墙) + 画一个红色三角形(屋顶) + 画一个小蓝色矩形(窗户)
-- "画一棵大树" → 画分形树
-- "画一片海" → 画海洋"""
+示例（画宇航员）：
+commands: ["画星空"]
+shapes: [
+  {{"shape": "rectangle", "color": [180,180,180], "size": 140, "position": [0.5, 0.6], "label": "身体"}},
+  {{"shape": "circle", "color": [220,220,220], "size": 100, "position": [0.5, 0.35], "label": "头盔"}},
+  {{"shape": "circle", "color": [100,150,200], "size": 60, "position": [0.5, 0.35], "label": "面罩玻璃"}},
+  {{"shape": "rectangle", "color": [180,180,180], "size": 60, "position": [0.38, 0.75], "label": "左腿"}},
+  {{"shape": "rectangle", "color": [180,180,180], "size": 60, "position": [0.62, 0.75], "label": "右腿"}}
+]
 
-        system = "你是绘图指令生成器。将用户的任意描述转换为可执行的绘图指令序列。用基础图形(圆、矩形、三角形、星形、爱心、线条)的组合来表达一切。只返回 JSON。"
+示例（画猫）：
+shapes: [
+  {{"shape": "circle", "color": [255,165,0], "size": 120, "position": [0.5, 0.5], "label": "脸"}},
+  {{"shape": "triangle", "color": [255,165,0], "size": 40, "position": [0.4, 0.32], "label": "左耳"}},
+  {{"shape": "triangle", "color": [255,165,0], "size": 40, "position": [0.6, 0.32], "label": "右耳"}},
+  {{"shape": "circle", "color": [30,30,30], "size": 20, "position": [0.43, 0.47], "label": "左眼"}},
+  {{"shape": "circle", "color": [30,30,30], "size": 20, "position": [0.57, 0.47], "label": "右眼"}},
+  {{"shape": "circle", "color": [255,150,180], "size": 15, "position": [0.5, 0.55], "label": "鼻子"}}
+]
+
+示例（画房子）：
+shapes: [
+  {{"shape": "rectangle", "color": [139,90,43], "size": 200, "position": [0.5, 0.6], "label": "墙"}},
+  {{"shape": "triangle", "color": [220,50,50], "size": 180, "position": [0.5, 0.35], "label": "屋顶"}},
+  {{"shape": "rectangle", "color": [100,180,255], "size": 50, "position": [0.4, 0.55], "label": "左窗"}},
+  {{"shape": "rectangle", "color": [100,180,255], "size": 50, "position": [0.6, 0.55], "label": "右窗"}},
+  {{"shape": "rectangle", "color": [139,69,19], "size": 70, "position": [0.5, 0.72], "label": "门"}}
+]"""
+
+        system = "你是绘图指令生成器。将用户的任意描述转换为结构化绘图数据。返回纯 JSON，不要包含其他文字。"
 
         result = await self._call_llm(prompt, system)
         parsed = self._parse_json(result)
-        if parsed.get("commands"):
+        if parsed.get("commands") or parsed.get("shapes"):
             return parsed
-        return {"understood": "", "commands": [], "fallback": True}
+        return {"understood": "", "commands": [], "shapes": [], "fallback": True}
 
     # ============ 画面评估 ============
 

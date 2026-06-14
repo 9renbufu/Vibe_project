@@ -209,17 +209,19 @@ class DrawingWSHandler:
         all_instructions = []
         error = False
 
-        # LLM 作为绘图大脑：当规则引擎无法处理时，用 LLM 理解意图并生成绘图指令
+        # LLM 作为绘图大脑：当规则引擎无法处理时，用 LLM 理解意图并生成绘图数据
         llm_generated = False
         if self.agent and (parsed.command_type == CommandType.UNKNOWN or parsed.confidence < 0.5):
             try:
                 llm_result = await self.agent.understand_and_generate(text)
                 commands = llm_result.get("commands", [])
+                shapes = llm_result.get("shapes", [])
 
-                if commands:
-                    # LLM 生成了指令序列，逐条执行
+                if commands or shapes:
                     llm_generated = True
                     response_text = llm_result.get("understood", "已理解你的意图")
+
+                    # 执行场景/艺术指令（走 parser）
                     for cmd in commands:
                         try:
                             sub_parsed = parse_command(cmd)
@@ -228,6 +230,25 @@ class DrawingWSHandler:
                                 all_instructions.extend(sub_insts)
                         except Exception:
                             pass
+
+                    # 直接执行结构化 shapes（不经过 parser）
+                    for shape_data in shapes:
+                        try:
+                            shape_type = shape_data.get("shape", "circle")
+                            color = tuple(shape_data.get("color", [100, 100, 100]))
+                            size = shape_data.get("size", 80)
+                            pos = shape_data.get("position")
+                            position = tuple(pos) if pos and len(pos) == 2 else None
+                            insts = engine.draw_shape(
+                                shape_type=shape_type,
+                                color=color,
+                                size=size,
+                                position=position,
+                            )
+                            all_instructions.extend(insts)
+                        except Exception:
+                            pass
+
                 elif llm_result.get("fallback"):
                     # LLM 也无法处理，画个默认图案 + 友好提示
                     all_instructions = engine.draw_shape(
