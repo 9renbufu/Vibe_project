@@ -41,6 +41,19 @@ export interface CanvasRecord {
   shape_count: number;
 }
 
+export interface Suggestion {
+  text: string;
+  command: string;
+}
+
+export interface Evaluation {
+  score: number;
+  feedback: string;
+  suggestions: Suggestion[];
+  color_feedback: string;
+  composition_feedback: string;
+}
+
 interface DrawingState {
   // 画布状态
   canvasWidth: number;
@@ -75,6 +88,9 @@ interface DrawingState {
   records: CanvasRecord[];
   activeRecordId: string | null;
 
+  // Agent 评估
+  evaluation: Evaluation | null;
+
   // Actions
   setBackground: (color: string) => void;
   setShapeCount: (count: number) => void;
@@ -92,6 +108,7 @@ interface DrawingState {
   setDrawingHistory: (history: DrawingHistoryRecord[]) => void;
   setRecords: (records: CanvasRecord[]) => void;
   setActiveRecordId: (id: string | null) => void;
+  setEvaluation: (evaluation: Evaluation | null) => void;
   reset: () => void;
 }
 
@@ -113,6 +130,7 @@ export const useDrawingStore = create<DrawingState>((set) => ({
   drawingHistory: [],
   records: [],
   activeRecordId: null,
+  evaluation: null,
 
   setBackground: (color) => set({ background: color }),
   setShapeCount: (count) => set({ shapeCount: count }),
@@ -137,6 +155,7 @@ export const useDrawingStore = create<DrawingState>((set) => ({
   setDrawingHistory: (history) => set({ drawingHistory: history }),
   setRecords: (records) => set({ records }),
   setActiveRecordId: (id) => set({ activeRecordId: id }),
+  setEvaluation: (evaluation) => set({ evaluation }),
   reset: () =>
     set({
       background: 'rgb(255,255,255)',
@@ -149,5 +168,6 @@ export const useDrawingStore = create<DrawingState>((set) => ({
       drawingHistory: [],
       records: [],
       activeRecordId: null,
+      evaluation: null,
     }),
 }));

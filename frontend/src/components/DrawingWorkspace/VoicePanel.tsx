@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDrawingStore } from '../../store/drawingStore';
-import { setWs, sendCommand as wsSendCommand, sendMessage } from '../../store/wsManager';
+import { setWs, sendCommand as wsSendCommand, sendMessage, sendAcceptSuggestion, sendRejectSuggestion } from '../../store/wsManager';
 
 const WAKE_WORDS = ['小画', '小华', '小花', '开始画', '画画'];
 
@@ -115,6 +115,28 @@ const VoicePanel: React.FC = () => {
         case 'canvas_state':
           applyInstructions([], message.data);
           break;
+        case 'evaluation_result':
+          // LLM 评估结果
+          if (message.data.evaluation) {
+            useDrawingStore.getState().setEvaluation(message.data.evaluation);
+          }
+          break;
+        case 'suggestion_applied':
+          setLastCommand('已应用修改建议');
+          useDrawingStore.getState().setEvaluation(null);
+          break;
+        case 'suggestion_rejected':
+          setLastCommand('已忽略建议');
+          useDrawingStore.getState().setEvaluation(null);
+          break;
+        case 'feedback_result':
+          if (message.data.action === 'accepted') {
+            setLastCommand('好的，保持当前画面');
+          } else if (message.data.action === 'rejected') {
+            setLastCommand('好的，已忽略建议');
+          }
+          useDrawingStore.getState().setEvaluation(null);
+          break;
         case 'error':
           setIsProcessing(false);
           setLastCommand(`错误: ${message.data.message}`);
@@ -135,13 +157,38 @@ const VoicePanel: React.FC = () => {
     };
   }, []);
 
-  // 发送指令
+  // 发送指令（含 Agent 反馈检测）
   const sendCommand = useCallback((text: string) => {
     if (!text.trim()) return;
-    if (wsSendCommand(text)) {
+    const trimmed = text.trim();
+
+    // 检测是否是对评估的反馈
+    const evaluation = useDrawingStore.getState().evaluation;
+    if (evaluation) {
+      const acceptWords = ['好', '可以', '不错', '就这样', '行', '没问题', '接受', '满意'];
+      const rejectWords = ['不好', '不行', '重来', '算了', '不要', '拒绝', '不满意'];
+
+      for (const w of rejectWords) {
+        if (trimmed.includes(w)) {
+          sendRejectSuggestion();
+          setLastCommand('已忽略建议');
+          return;
+        }
+      }
+      for (const w of acceptWords) {
+        if (trimmed.includes(w)) {
+          sendAcceptSuggestion(0);
+          setLastCommand('已应用建议');
+          return;
+        }
+      }
+    }
+
+    // 普通指令
+    if (wsSendCommand(trimmed)) {
       setIsProcessing(true);
     }
-  }, [setIsProcessing]);
+  }, [setIsProcessing, setLastCommand]);
 
   // 语音识别
   useEffect(() => {

@@ -6,6 +6,7 @@
 import React from 'react';
 import { useDrawingStore } from '../../store/drawingStore';
 import { sendCommand, sendCreateRecord, sendSwitchRecord } from '../../store/wsManager';
+import EvaluationPanel from './EvaluationPanel';
 
 const StatusPanel: React.FC = () => {
   const {
@@ -101,6 +102,9 @@ const StatusPanel: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* AI 评估 */}
+      <EvaluationPanel />
 
       {/* Current Status */}
       {lastCommand && (

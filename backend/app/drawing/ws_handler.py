@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .parser import parse_command, CommandType
 from .engine import DrawingEngine
+from .agent import DrawingAgent
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "drawing"
 PREFS_FILE = DATA_DIR / "preferences.json"
@@ -35,6 +36,8 @@ class DrawingSession:
         self.command_history: List[Dict] = []
         self.preferences = self._load_preferences()
         self.drawing_history = self._load_history()
+        # Agent 评估结果
+        self.last_evaluation: Optional[Dict] = None
         # 兼容旧代码的属性
         self._engine = DrawingEngine(width, height)
 
@@ -163,8 +166,9 @@ class DrawingSession:
 
 
 class DrawingWSHandler:
-    def __init__(self):
+    def __init__(self, llm_client=None, vision_client=None):
         self.sessions: Dict[str, DrawingSession] = {}
+        self.agent = DrawingAgent(llm_client, vision_client) if llm_client else None
 
     def create_session(self, width: int = 1200, height: int = 800) -> DrawingSession:
         session = DrawingSession(width, height)
@@ -194,13 +198,28 @@ class DrawingWSHandler:
 
         parsed = parse_command(text)
 
+        # 低置信度时用 LLM 纠错
+        llm_corrected = False
+        corrected_text = ""
+        if self.agent and (parsed.confidence < 0.7 or parsed.command_type == CommandType.UNKNOWN):
+            try:
+                corrected_text = await self.agent.correct_command(text, parsed.confidence)
+                if corrected_text and corrected_text != text:
+                    reparsed = parse_command(corrected_text)
+                    if reparsed.command_type != CommandType.UNKNOWN and reparsed.confidence > parsed.confidence:
+                        parsed = reparsed
+                        llm_corrected = True
+            except Exception:
+                pass
+
         session.command_history.append({
             "text": text,
             "type": parsed.command_type.value,
             "confidence": parsed.confidence,
+            "llm_corrected": llm_corrected,
         })
 
-        response_text = ""
+        response_text = f"理解为: {corrected_text}" if llm_corrected else ""
         all_instructions = []
         error = False
 
@@ -351,6 +370,31 @@ class DrawingWSHandler:
                 "data": {"total": len(inst_dicts)},
             }
 
+        # 绘制完成后自动评估（不阻塞响应）
+        if self.agent and not error and len(all_instructions) > 0:
+            send_cb = self._ws_send_callback if hasattr(self, '_ws_send_callback') else None
+            asyncio.create_task(self._evaluate_async(session, engine, send_cb))
+
+    async def _evaluate_async(self, session: DrawingSession, engine: DrawingEngine,
+                               send_callback=None):
+        """异步评估画作，完成后通过回调发送结果"""
+        try:
+            state = engine.get_state()
+            evaluation = await self.agent.evaluate_drawing(
+                state, session.command_history[-10:]
+            )
+            session.last_evaluation = evaluation
+            if send_callback:
+                await send_callback({
+                    "type": "evaluation_result",
+                    "data": {
+                        "evaluation": evaluation,
+                        "record_id": session.active_record_id,
+                    },
+                })
+        except Exception as e:
+            print(f"[DrawingAgent] Evaluation error: {e}")
+
     async def process_message(self, session: DrawingSession, message: dict) -> dict:
         msg_type = message.get("type", "")
         data = message.get("data", {})
@@ -446,7 +490,138 @@ class DrawingWSHandler:
                 },
             }
 
+        elif msg_type == "evaluate":
+            # 手动触发评估
+            if self.agent:
+                state = engine.get_state()
+                evaluation = await self.agent.evaluate_drawing(
+                    state, session.command_history[-10:]
+                )
+                session.last_evaluation = evaluation
+                return {
+                    "type": "evaluation_result",
+                    "data": {
+                        "evaluation": evaluation,
+                        "record_id": session.active_record_id,
+                    },
+                }
+            else:
+                return {"type": "error", "data": {"message": "LLM Agent 未配置，无法评估"}}
+
+        elif msg_type == "accept_suggestion":
+            # 接受修改建议
+            evaluation = session.last_evaluation
+            if not evaluation:
+                return {"type": "error", "data": {"message": "没有待处理的建议"}}
+
+            idx = data.get("index", -1)
+            suggestions = evaluation.get("suggestions", [])
+
+            if idx >= 0 and idx < len(suggestions):
+                cmd = suggestions[idx].get("command", "")
+                if cmd:
+                    session.last_evaluation = None
+                    return await self._handle_single_command(session, cmd)
+            elif suggestions:
+                cmd = suggestions[0].get("command", "")
+                if cmd:
+                    session.last_evaluation = None
+                    return await self._handle_single_command(session, cmd)
+            return {"type": "suggestion_applied", "data": {"index": -1}}
+
+        elif msg_type == "reject_suggestion":
+            session.last_evaluation = None
+            return {"type": "suggestion_rejected", "data": {}}
+
+        elif msg_type == "apply_feedback":
+            # 用户语音反馈
+            feedback_text = data.get("text", "")
+            if not feedback_text:
+                return {"type": "error", "data": {"message": "缺少反馈内容"}}
+
+            if self.agent and session.last_evaluation:
+                # 分析用户意图
+                analysis = await self.agent.analyze_feedback(
+                    feedback_text, session.last_evaluation
+                )
+                action = analysis.get("action", "unknown")
+
+                if action == "accept":
+                    session.last_evaluation = None
+                    return {"type": "feedback_result", "data": {"action": "accepted"}}
+                elif action == "reject":
+                    session.last_evaluation = None
+                    return {"type": "feedback_result", "data": {"action": "rejected"}}
+                elif action == "modify":
+                    # 执行修改指令
+                    commands = analysis.get("commands", [])
+                    if commands:
+                        cmd = commands[0]
+                        return await self._handle_single_command(session, cmd)
+                    return {"type": "feedback_result", "data": {"action": "modify", "commands": commands}}
+                else:
+                    # 当作普通指令处理
+                    return await self._handle_single_command(session, feedback_text)
+            else:
+                # 没有 Agent 或没有评估，当普通指令
+                return await self._handle_single_command(session, feedback_text)
+
         return {"type": "error", "data": {"message": f"未知消息类型: {msg_type}"}}
+
+    async def _handle_single_command(self, session: DrawingSession, text: str) -> dict:
+        """处理单条指令，返回结果（非流式）"""
+        record_id = session.get_active_record_id()
+        engine = session.get_active_engine()
+        parsed = parse_command(text)
+
+        instructions = []
+        response_text = ""
+
+        try:
+            if parsed.command_type == CommandType.DRAW_SHAPE:
+                instructions = engine.draw_shape(
+                    shape_type=parsed.shape_type or "circle",
+                    color=parsed.color, size=parsed.size, position=parsed.position,
+                )
+                response_text = f"已绘制 {parsed.shape_type or '圆形'}"
+            elif parsed.command_type == CommandType.DRAW_ART:
+                art_type = parsed.art_type or "flow_field"
+                method = getattr(engine, f"generate_{art_type}", None)
+                if method:
+                    instructions = await asyncio.to_thread(method, {"color": parsed.color, "append": True})
+                    response_text = f"已生成 {art_type}"
+            elif parsed.command_type == CommandType.DRAW_SCENE:
+                instructions = await asyncio.to_thread(
+                    engine.generate_landscape, parsed.scene_type or "sunset",
+                    {"color": parsed.color, "append": True}
+                )
+                response_text = f"已绘制 {parsed.scene_type or '日落'}"
+            elif parsed.command_type == CommandType.UNDO:
+                instructions = engine.undo()
+                response_text = "已撤销"
+            elif parsed.command_type == CommandType.REDO:
+                instructions = engine.redo()
+                response_text = "已重做"
+            elif parsed.command_type == CommandType.CLEAR:
+                instructions = engine.clear()
+                response_text = "画布已清空"
+            else:
+                response_text = f"未识别指令: {text}"
+        except Exception as e:
+            response_text = f"执行出错: {str(e)}"
+
+        session.update_active_meta()
+        return {
+            "type": "drawing_update",
+            "data": {
+                "instructions": [asdict(i) for i in instructions],
+                "state": engine.get_state(),
+                "response": response_text,
+                "error": False,
+                "record_id": record_id,
+                "records": session.list_records(),
+            },
+        }
 
     async def _execute_single(self, engine: DrawingEngine, parsed) -> list:
         """执行单条解析后的指令，返回指令列表"""

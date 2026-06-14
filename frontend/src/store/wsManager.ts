@@ -39,3 +39,20 @@ export function sendSwitchRecord(recordId: string) {
 export function sendListRecords() {
   return sendMessage('list_records');
 }
+
+// Agent 相关
+export function sendEvaluate() {
+  return sendMessage('evaluate');
+}
+
+export function sendAcceptSuggestion(index: number = -1) {
+  return sendMessage('accept_suggestion', { index });
+}
+
+export function sendRejectSuggestion() {
+  return sendMessage('reject_suggestion');
+}
+
+export function sendApplyFeedback(text: string) {
+  return sendMessage('apply_feedback', { text });
+}
