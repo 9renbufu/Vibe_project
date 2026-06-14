@@ -33,6 +33,14 @@ interface DrawingHistoryRecord {
   timestamp: string;
 }
 
+export interface CanvasRecord {
+  id: string;
+  title: string;
+  created_at: string;
+  command_count: number;
+  shape_count: number;
+}
+
 interface DrawingState {
   // 画布状态
   canvasWidth: number;
@@ -63,6 +71,10 @@ interface DrawingState {
   // 绘图历史
   drawingHistory: DrawingHistoryRecord[];
 
+  // 画布记录
+  records: CanvasRecord[];
+  activeRecordId: string | null;
+
   // Actions
   setBackground: (color: string) => void;
   setShapeCount: (count: number) => void;
@@ -75,8 +87,11 @@ interface DrawingState {
   setConnected: (connected: boolean) => void;
   setIsProcessing: (processing: boolean) => void;
   applyInstructions: (instructions: DrawingInstruction[], state?: any) => void;
+  appendInstructions: (instructions: DrawingInstruction[]) => void;
   setPreferences: (prefs: UserPreferences) => void;
   setDrawingHistory: (history: DrawingHistoryRecord[]) => void;
+  setRecords: (records: CanvasRecord[]) => void;
+  setActiveRecordId: (id: string | null) => void;
   reset: () => void;
 }
 
@@ -96,6 +111,8 @@ export const useDrawingStore = create<DrawingState>((set) => ({
   instructions: [],
   preferences: null,
   drawingHistory: [],
+  records: [],
+  activeRecordId: null,
 
   setBackground: (color) => set({ background: color }),
   setShapeCount: (count) => set({ shapeCount: count }),
@@ -114,8 +131,12 @@ export const useDrawingStore = create<DrawingState>((set) => ({
       background: state?.background || 'rgb(255,255,255)',
       shapeCount: state?.shape_count || 0,
     }),
+  appendInstructions: (newInstructions) =>
+    set((s) => ({ instructions: [...s.instructions, ...newInstructions] })),
   setPreferences: (prefs) => set({ preferences: prefs }),
   setDrawingHistory: (history) => set({ drawingHistory: history }),
+  setRecords: (records) => set({ records }),
+  setActiveRecordId: (id) => set({ activeRecordId: id }),
   reset: () =>
     set({
       background: 'rgb(255,255,255)',
@@ -126,5 +147,7 @@ export const useDrawingStore = create<DrawingState>((set) => ({
       transcript: '',
       preferences: null,
       drawingHistory: [],
+      records: [],
+      activeRecordId: null,
     }),
 }));

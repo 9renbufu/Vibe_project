@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDrawingStore } from '../../store/drawingStore';
+import { setWs, sendCommand as wsSendCommand, sendMessage } from '../../store/wsManager';
 
 const VoicePanel: React.FC = () => {
   const [inputText, setInputText] = useState('');
@@ -12,13 +13,12 @@ const VoicePanel: React.FC = () => {
     isListening, transcript, connected, isProcessing,
     commandHistory, lastCommand,
     setIsListening, setTranscript, setConnected, setIsProcessing,
-    setLastCommand, addCommandRecord, applyInstructions, reset,
-    setPreferences, setDrawingHistory,
+    setLastCommand, addCommandRecord, applyInstructions, appendInstructions, reset,
+    setPreferences, setDrawingHistory, setRecords, setActiveRecordId,
   } = useDrawingStore();
 
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
-  const wsRef = useRef<WebSocket | null>(null);
 
   // WebSocket 连接
   useEffect(() => {
@@ -28,15 +28,16 @@ const VoicePanel: React.FC = () => {
 
     socket.onopen = () => {
       setConnected(true);
-      wsRef.current = socket;
+      setWs(socket);
     };
 
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data);
       switch (message.type) {
         case 'drawing_update':
-          setIsProcessing(false);
-          // 只在有新指令时更新画布（空指令表示识别失败，保留原画布）
+          if (!message.data.streaming) {
+            setIsProcessing(false);
+          }
           if (message.data.instructions && message.data.instructions.length > 0) {
             applyInstructions(message.data.instructions, message.data.state);
             setIsError(false);
@@ -44,7 +45,6 @@ const VoicePanel: React.FC = () => {
             setIsError(true);
           }
           setLastCommand(message.data.response || '');
-          // 记录所有指令（包括失败的）
           if (message.data.parsed) {
             addCommandRecord({
               text: message.data.parsed.raw || message.data.parsed.text || '',
@@ -53,12 +53,57 @@ const VoicePanel: React.FC = () => {
               timestamp: new Date().toISOString(),
             });
           }
-          // 更新偏好和历史
           if (message.data.preferences) {
             setPreferences(message.data.preferences);
           }
           if (message.data.drawing_history) {
             setDrawingHistory(message.data.drawing_history);
+          }
+          // 更新记录列表和活跃记录
+          if (message.data.records) {
+            setRecords(message.data.records);
+          }
+          if (message.data.record_id) {
+            setActiveRecordId(message.data.record_id);
+          }
+          break;
+        case 'drawing_batch':
+          if (message.data.instructions && message.data.instructions.length > 0) {
+            appendInstructions(message.data.instructions);
+          }
+          break;
+        case 'drawing_complete':
+          setIsProcessing(false);
+          break;
+        case 'record_created':
+          // 新记录创建完成
+          setIsProcessing(false);
+          if (message.data.records) {
+            setRecords(message.data.records);
+          }
+          if (message.data.record_id) {
+            setActiveRecordId(message.data.record_id);
+          }
+          applyInstructions(message.data.instructions || [], message.data.state);
+          break;
+        case 'record_switched':
+          // 切换到已有记录
+          setIsProcessing(false);
+          if (message.data.records) {
+            setRecords(message.data.records);
+          }
+          if (message.data.record_id) {
+            setActiveRecordId(message.data.record_id);
+          }
+          // 全量重绘该记录的画布
+          applyInstructions(message.data.instructions || [], message.data.state);
+          break;
+        case 'records_list':
+          if (message.data.records) {
+            setRecords(message.data.records);
+          }
+          if (message.data.active_record_id) {
+            setActiveRecordId(message.data.active_record_id);
           }
           break;
         case 'canvas_state':
@@ -73,7 +118,7 @@ const VoicePanel: React.FC = () => {
 
     socket.onclose = () => {
       setConnected(false);
-      wsRef.current = null;
+      setWs(null);
       setTimeout(() => {
         // 自动重连
       }, 3000);
@@ -86,14 +131,10 @@ const VoicePanel: React.FC = () => {
 
   // 发送指令
   const sendCommand = useCallback((text: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     if (!text.trim()) return;
-
-    setIsProcessing(true);
-    wsRef.current.send(JSON.stringify({
-      type: 'voice_input',
-      data: { text: text.trim() },
-    }));
+    if (wsSendCommand(text)) {
+      setIsProcessing(true);
+    }
   }, [setIsProcessing]);
 
   // 语音识别
@@ -163,8 +204,7 @@ const VoicePanel: React.FC = () => {
   };
 
   const handleReset = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'reset' }));
+    if (sendMessage('reset')) {
       reset();
     }
   };
@@ -256,7 +296,18 @@ const VoicePanel: React.FC = () => {
             <div style={styles.emptyHint}>使用语音或点击快捷指令开始绘图</div>
           )}
           {commandHistory.slice().reverse().map((cmd, i) => (
-            <div key={i} style={styles.historyItem}>
+            <div
+              key={i}
+              style={styles.historyItem}
+              onClick={() => sendCommand(cmd.text)}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLDivElement).style.backgroundColor = '#eef2ff';
+                (e.currentTarget as HTMLDivElement).style.cursor = 'pointer';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent';
+              }}
+            >
               <div style={styles.historyText}>{cmd.text}</div>
               <div style={styles.historyMeta}>
                 <span style={styles.historyType}>{cmd.type}</span>

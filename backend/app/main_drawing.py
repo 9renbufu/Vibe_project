@@ -80,8 +80,9 @@ async def websocket_draw(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
-            result = await handler.process_message(session, data)
-            await websocket.send_json(result)
+            # 流式处理：分批发送绘图指令
+            async for batch in handler.process_message_stream(session, data):
+                await websocket.send_json(batch)
     except WebSocketDisconnect:
         handler.remove_session(session.session_id)
     except Exception as e:
