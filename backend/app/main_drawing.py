@@ -1,9 +1,10 @@
 """
 语音绘图工具 - FastAPI 入口
-题目二：纯语音控制绘图工具
+纯语音控制绘图工具 + LLM Agent 增强
 """
 
 import os
+import asyncio
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .drawing.ws_handler import DrawingWSHandler
+from .modules.llm_client import LLMClientFactory
 
 app = FastAPI(title="Voice Drawing Tool", version="1.0.0")
 
@@ -23,7 +25,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-handler = DrawingWSHandler()
+# 初始化 LLM 客户端（用于 Agent 智能增强）
+llm_client = LLMClientFactory.create()
+vision_client = LLMClientFactory.create_vision()
+if llm_client:
+    print(f"[DrawingAgent] LLM 已启用: {type(llm_client).__name__}")
+else:
+    print("[DrawingAgent] LLM 未配置，Agent 增强功能不可用")
+
+handler = DrawingWSHandler(llm_client=llm_client, vision_client=vision_client)
 
 
 @app.get("/api/drawing/health")
@@ -70,6 +80,15 @@ async def presets():
 async def websocket_draw(websocket: WebSocket):
     await websocket.accept()
     session = handler.create_session()
+
+    # 设置 Agent 评估完成后的回调（通过 WebSocket 推送结果）
+    async def send_callback(message: dict):
+        try:
+            await websocket.send_json(message)
+        except Exception:
+            pass
+
+    handler._ws_send_callback = send_callback
 
     # 发送初始状态
     await websocket.send_json({
