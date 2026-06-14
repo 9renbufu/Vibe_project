@@ -417,7 +417,7 @@ const VoicePanel: React.FC = () => {
       </div>
 
       {/* Command History */}
-      <div style={{ ...styles.section, flex: 1, overflow: 'hidden' }}>
+      <div style={{ ...styles.section, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={styles.sectionTitle}>指令历史</div>
         <div style={styles.historyList}>
           {commandHistory.length === 0 && (
@@ -478,8 +478,9 @@ const VoicePanel: React.FC = () => {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    display: 'flex', flexDirection: 'column', height: '100%',
+    display: 'flex', flexDirection: 'column', height: '100vh',
     backgroundColor: '#ffffff', borderRight: '1px solid #e5e7eb',
+    overflow: 'hidden',
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -519,7 +520,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '16px', backgroundColor: '#f9fafb', cursor: 'pointer',
     color: '#374151', transition: 'all 0.15s', whiteSpace: 'nowrap',
   },
-  historyList: { overflowY: 'auto', maxHeight: '100%' },
+  historyList: { overflowY: 'auto', flex: 1 },
   emptyHint: { fontSize: '12px', color: '#9ca3af', textAlign: 'center', padding: '20px 0' },
   historyItem: {
     padding: '8px 0', borderBottom: '1px solid #f3f4f6',
@@ -546,7 +547,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#6b7280', transition: 'all 0.2s', whiteSpace: 'nowrap',
   },
   modeToggleActive: {
-    backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1',
+    backgroundColor: '#6366f1', color: '#fff', border: '1px solid #6366f1',
   },
   micBtnLarge: {
     width: '80px', height: '80px', border: '3px solid #d1d5db', borderRadius: '50%',

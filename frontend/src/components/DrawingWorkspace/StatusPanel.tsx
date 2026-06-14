@@ -152,7 +152,7 @@ const StatusPanel: React.FC = () => {
       )}
 
       {/* Canvas Records */}
-      <div style={{ ...styles.section, flex: 1, overflow: 'hidden' }}>
+      <div style={{ ...styles.section, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={styles.sectionHeader}>
           <div style={styles.sectionTitle}>画布记录</div>
           <button style={styles.newCanvasBtn} onClick={handleNewCanvas}>
@@ -197,7 +197,7 @@ const StatusPanel: React.FC = () => {
       </div>
 
       {/* Presets Gallery */}
-      <div style={{ ...styles.section, maxHeight: '280px', overflow: 'hidden' }}>
+      <div style={{ ...styles.section, maxHeight: '240px', overflow: 'auto' }}>
         <div style={styles.sectionTitle}>预设画廊</div>
         <div style={styles.presetsGrid}>
           {presets.map((p) => (
@@ -224,7 +224,7 @@ const StatusPanel: React.FC = () => {
       </div>
 
       {/* Export */}
-      <div style={styles.section}>
+      <div style={{ ...styles.section, flexShrink: 0 }}>
         <button style={styles.exportBtn} onClick={handleExport}>
            导出 PNG
         </button>
@@ -235,8 +235,9 @@ const StatusPanel: React.FC = () => {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    display: 'flex', flexDirection: 'column', height: '100%',
+    display: 'flex', flexDirection: 'column', height: '100vh',
     backgroundColor: '#ffffff', borderLeft: '1px solid #e5e7eb',
+    overflow: 'hidden',
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -283,7 +284,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #6366f1', borderRadius: '6px',
     backgroundColor: '#fff', color: '#6366f1', cursor: 'pointer',
   },
-  recordsList: { overflowY: 'auto', maxHeight: '100%' },
+  recordsList: { overflowY: 'auto', flex: 1 },
   emptyHint: { fontSize: '12px', color: '#9ca3af', textAlign: 'center', padding: '16px 0' },
   recordItem: {
     padding: '8px 10px', borderBottom: '1px solid #f3f4f6',
