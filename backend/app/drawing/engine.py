@@ -882,32 +882,97 @@ class DrawingEngine:
         self.background = (5, 5, 20)
         instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
-        # 星星
-        for _ in range(80):
+        # 银河光带（淡淡的斜向椭圆区域）
+        milky_cx = self.width * 0.5
+        milky_cy = self.height * 0.35
+        for _ in range(40):
+            angle = random.uniform(-0.4, 0.4)
+            dist = random.uniform(-300, 300)
+            x = milky_cx + dist * math.cos(angle) + random.gauss(0, 60)
+            y = milky_cy + dist * math.sin(angle) + random.gauss(0, 25)
+            if 0 < x < self.width and 0 < y < self.height * 0.7:
+                r = random.uniform(15, 50)
+                alpha = random.uniform(0.01, 0.03)
+                shape_params = {"cx": x, "cy": y, "radius": r, "fill": _color_with_alpha((180, 200, 255), alpha), "stroke": "transparent"}
+                self._add_shape("circle", shape_params, layer=0)
+
+        # 背景小星星（密密麻麻）
+        for _ in range(120):
+            x = random.uniform(0, self.width)
+            y = random.uniform(0, self.height * 0.75)
+            r = random.uniform(0.3, 1.5)
+            alpha = random.uniform(0.3, 0.8)
+            shape_params = {"cx": x, "cy": y, "radius": r, "fill": _color_with_alpha((255, 255, 240), alpha), "stroke": "transparent"}
+            self._add_shape("circle", shape_params, layer=1)
+
+        # 中等亮度星星
+        for _ in range(30):
             x = random.uniform(0, self.width)
             y = random.uniform(0, self.height * 0.7)
-            r = random.uniform(0.5, 2.5)
-            alpha = random.uniform(0.4, 1.0)
-            shape_params = {"cx": x, "cy": y, "radius": r, "fill": _color_with_alpha((255, 255, 240), alpha), "stroke": "transparent"}
-            self._add_shape("circle", shape_params, layer=0)
+            r = random.uniform(1.5, 3.0)
+            alpha = random.uniform(0.6, 1.0)
+            # 偶尔有颜色偏移（偏蓝/偏红）
+            c = random.choice([(255, 255, 240), (200, 220, 255), (255, 220, 200)])
+            shape_params = {"cx": x, "cy": y, "radius": r, "fill": _color_with_alpha(c, alpha), "stroke": "transparent"}
+            self._add_shape("circle", shape_params, layer=2)
 
-        # 大亮星
-        for _ in range(5):
+        # 大亮星（带光晕）
+        for _ in range(6):
             x = random.uniform(50, self.width - 50)
             y = random.uniform(30, self.height * 0.5)
-            for r in range(10, 0, -1):
-                alpha = 0.02 + (15 - r) / 15 * 0.1
-                shape_params = {"cx": x, "cy": y, "radius": r, "fill": _color_with_alpha((200, 220, 255), alpha), "stroke": "transparent"}
-                self._add_shape("circle", shape_params, layer=1)
+            star_color = random.choice([(200, 220, 255), (255, 240, 220), (220, 200, 255)])
+            for r in range(12, 0, -1):
+                alpha = 0.02 + (12 - r) / 12 * 0.12
+                shape_params = {"cx": x, "cy": y, "radius": r, "fill": _color_with_alpha(star_color, alpha), "stroke": "transparent"}
+                self._add_shape("circle", shape_params, layer=3)
+            # 核心亮点
+            shape_params = {"cx": x, "cy": y, "radius": 2, "fill": "rgb(255,255,255)", "stroke": "transparent"}
+            self._add_shape("circle", shape_params, layer=4)
 
-        # 月亮
-        mx, my = self.width * 0.8, self.height * 0.15
-        for r in range(25, 0, -2):
-            alpha = 0.02 + (50 - r) / 50 * 0.06
+        # 月亮（带大气光晕）
+        mx, my = self.width * 0.82, self.height * 0.12
+        for r in range(40, 0, -1):
+            alpha = 0.01 + (40 - r) / 40 * 0.04
             shape_params = {"cx": mx, "cy": my, "radius": r, "fill": _color_with_alpha((255, 250, 220), alpha), "stroke": "transparent"}
-            self._add_shape("circle", shape_params, layer=2)
+            self._add_shape("circle", shape_params, layer=5)
         shape_params = {"cx": mx, "cy": my, "radius": 18, "fill": "rgb(255,250,230)", "stroke": "transparent"}
-        self._add_shape("circle", shape_params, layer=3)
+        self._add_shape("circle", shape_params, layer=6)
+
+        # 流星雨
+        for _ in range(8):
+            # 起点在右上区域
+            sx = random.uniform(self.width * 0.3, self.width * 0.95)
+            sy = random.uniform(20, self.height * 0.35)
+            # 向左下拖尾
+            tail_len = random.uniform(80, 200)
+            angle = random.uniform(0.6, 1.0)  # 斜向左下
+            ex = sx - tail_len * math.cos(angle)
+            ey = sy + tail_len * math.sin(angle)
+
+            # 流星拖尾（渐变线条，从亮到暗）
+            segments = 8
+            for s in range(segments):
+                t1 = s / segments
+                t2 = (s + 1) / segments
+                x1 = sx + (ex - sx) * t1
+                y1 = sy + (ey - sy) * t1
+                x2 = sx + (ex - sx) * t2
+                y2 = sy + (ey - sy) * t2
+                alpha = 0.8 * (1 - t1)  # 头亮尾暗
+                width = 2.5 * (1 - t1 * 0.7)  # 头粗尾细
+                shape_params = {
+                    "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+                    "stroke": _color_with_alpha((220, 240, 255), alpha),
+                    "strokeWidth": width,
+                }
+                self._add_shape("line", shape_params, layer=7)
+
+            # 流星头部亮点
+            shape_params = {"cx": sx, "cy": sy, "radius": 3, "fill": _color_with_alpha((255, 255, 255), 0.9), "stroke": "transparent"}
+            self._add_shape("circle", shape_params, layer=8)
+            # 头部光晕
+            shape_params = {"cx": sx, "cy": sy, "radius": 8, "fill": _color_with_alpha((200, 220, 255), 0.15), "stroke": "transparent"}
+            self._add_shape("circle", shape_params, layer=8)
 
         instructions.append(DrawingInstruction(action="batch", params={"shapes": self.shapes.copy()}, layer=0))
         return instructions
