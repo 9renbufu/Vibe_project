@@ -130,6 +130,10 @@ class DrawingEngine:
         self.background = (255, 255, 255)
         return [DrawingInstruction(action="clear")]
 
+    def get_current_instructions(self) -> List[DrawingInstruction]:
+        """获取当前画布的完整指令（用于重绘）"""
+        return self._full_redraw()
+
     def _full_redraw(self) -> List[DrawingInstruction]:
         instructions = [DrawingInstruction(action="clear")]
         instructions.append(DrawingInstruction(
@@ -231,13 +235,14 @@ class DrawingEngine:
         scale = params.get("noise_scale", 0.005)
         palette_name = params.get("palette", "neon")
         palette = PALETTES.get(palette_name, PALETTES["neon"])
+        append_mode = params.get("append", False)
         self.noise = PerlinNoise(seed=random.randint(0, 99999))
 
         instructions = []
-        self.shapes = []
-        self.background = (15, 15, 25)
-
-        instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+        if not append_mode:
+            self.shapes = []
+            self.background = (15, 15, 25)
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         for _ in range(particle_count):
             x = random.uniform(0, self.width)
@@ -273,11 +278,13 @@ class DrawingEngine:
         angle = params.get("branch_angle", 25)
         decay = params.get("length_decay", 0.72)
         start_len = params.get("start_length", 140)
+        append_mode = params.get("append", False)
 
         instructions = []
-        self.shapes = []
-        self.background = (240, 248, 255)
-        instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+        if not append_mode:
+            self.shapes = []
+            self.background = (240, 248, 255)
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         cx = self.width / 2
         base_y = self.height * 0.85
@@ -322,11 +329,13 @@ class DrawingEngine:
         cx = params.get("cx", self.width / 2)
         cy = params.get("cy", self.height / 2)
         radius = params.get("radius", 150)
+        append_mode = params.get("append", False)
 
         instructions = []
-        self.shapes = []
-        self.background = (252, 250, 248)
-        instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+        if not append_mode:
+            self.shapes = []
+            self.background = (252, 250, 248)
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         for _ in range(layers):
             c = _color_var(color, 30)
@@ -356,11 +365,13 @@ class DrawingEngine:
         rings = params.get("rings", 4)
         palette_name = params.get("palette", "neon")
         palette = PALETTES.get(palette_name, PALETTES["neon"])
+        append_mode = params.get("append", False)
 
         instructions = []
-        self.shapes = []
-        self.background = (10, 10, 20)
-        instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+        if not append_mode:
+            self.shapes = []
+            self.background = (10, 10, 20)
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         cx = self.width / 2
         cy = self.height / 2
@@ -427,11 +438,13 @@ class DrawingEngine:
         r = params.get("r", 63)
         d = params.get("d", 80)
         color = params.get("color", (80, 60, 200))
+        append_mode = params.get("append", False)
 
         instructions = []
-        self.shapes = []
-        self.background = (15, 15, 30)
-        instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+        if not append_mode:
+            self.shapes = []
+            self.background = (15, 15, 30)
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         cx = self.width / 2
         cy = self.height / 2
@@ -470,11 +483,13 @@ class DrawingEngine:
         seed_count = params.get("seed_count", 25)
         palette_name = params.get("palette", "pastel")
         palette = PALETTES.get(palette_name, PALETTES["pastel"])
+        append_mode = params.get("append", False)
 
         instructions = []
-        self.shapes = []
-        self.background = (255, 255, 255)
-        instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+        if not append_mode:
+            self.shapes = []
+            self.background = (255, 255, 255)
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         seeds = [(random.uniform(0, self.width), random.uniform(0, self.height)) for _ in range(seed_count)]
         colors = [_color_var(random.choice(palette), 15) for _ in range(seed_count)]
@@ -514,8 +529,10 @@ class DrawingEngine:
     def generate_landscape(self, scene_type: str = "sunset", params: Optional[Dict] = None) -> List[DrawingInstruction]:
         self._save_state()
         params = params or {}
-        instructions = []
-        self.shapes = []
+        append_mode = params.get("append", False)
+
+        if not append_mode:
+            self.shapes = []
 
         generators = {
             "sunset": self._gen_sunset,

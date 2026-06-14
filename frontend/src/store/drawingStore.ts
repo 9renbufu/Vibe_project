@@ -18,6 +18,21 @@ interface CommandRecord {
   timestamp: string;
 }
 
+interface UserPreferences {
+  favorite_colors: string[];
+  favorite_styles: string[];
+  favorite_shapes: string[];
+  total_commands: number;
+}
+
+interface DrawingHistoryRecord {
+  command: string;
+  response: string;
+  shape_count: number;
+  background: string;
+  timestamp: string;
+}
+
 interface DrawingState {
   // 画布状态
   canvasWidth: number;
@@ -42,6 +57,12 @@ interface DrawingState {
   // 绘图指令（最新一批）
   instructions: DrawingInstruction[];
 
+  // 用户偏好
+  preferences: UserPreferences | null;
+
+  // 绘图历史
+  drawingHistory: DrawingHistoryRecord[];
+
   // Actions
   setBackground: (color: string) => void;
   setShapeCount: (count: number) => void;
@@ -54,6 +75,8 @@ interface DrawingState {
   setConnected: (connected: boolean) => void;
   setIsProcessing: (processing: boolean) => void;
   applyInstructions: (instructions: DrawingInstruction[], state?: any) => void;
+  setPreferences: (prefs: UserPreferences) => void;
+  setDrawingHistory: (history: DrawingHistoryRecord[]) => void;
   reset: () => void;
 }
 
@@ -71,6 +94,8 @@ export const useDrawingStore = create<DrawingState>((set) => ({
   connected: false,
   isProcessing: false,
   instructions: [],
+  preferences: null,
+  drawingHistory: [],
 
   setBackground: (color) => set({ background: color }),
   setShapeCount: (count) => set({ shapeCount: count }),
@@ -89,6 +114,8 @@ export const useDrawingStore = create<DrawingState>((set) => ({
       background: state?.background || 'rgb(255,255,255)',
       shapeCount: state?.shape_count || 0,
     }),
+  setPreferences: (prefs) => set({ preferences: prefs }),
+  setDrawingHistory: (history) => set({ drawingHistory: history }),
   reset: () =>
     set({
       background: 'rgb(255,255,255)',
@@ -97,5 +124,7 @@ export const useDrawingStore = create<DrawingState>((set) => ({
       commandHistory: [],
       lastCommand: '',
       transcript: '',
+      preferences: null,
+      drawingHistory: [],
     }),
 }));

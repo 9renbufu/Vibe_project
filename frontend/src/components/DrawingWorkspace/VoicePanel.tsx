@@ -7,11 +7,13 @@ import { useDrawingStore } from '../../store/drawingStore';
 
 const VoicePanel: React.FC = () => {
   const [inputText, setInputText] = useState('');
+  const [isError, setIsError] = useState(false);
   const {
     isListening, transcript, connected, isProcessing,
     commandHistory, lastCommand,
     setIsListening, setTranscript, setConnected, setIsProcessing,
     setLastCommand, addCommandRecord, applyInstructions, reset,
+    setPreferences, setDrawingHistory,
   } = useDrawingStore();
 
   const recognitionRef = useRef<any>(null);
@@ -34,15 +36,29 @@ const VoicePanel: React.FC = () => {
       switch (message.type) {
         case 'drawing_update':
           setIsProcessing(false);
-          applyInstructions(message.data.instructions, message.data.state);
+          // 只在有新指令时更新画布（空指令表示识别失败，保留原画布）
+          if (message.data.instructions && message.data.instructions.length > 0) {
+            applyInstructions(message.data.instructions, message.data.state);
+            setIsError(false);
+          } else if (message.data.error) {
+            setIsError(true);
+          }
           setLastCommand(message.data.response || '');
+          // 记录所有指令（包括失败的）
           if (message.data.parsed) {
             addCommandRecord({
-              text: message.data.parsed.raw || '',
+              text: message.data.parsed.raw || message.data.parsed.text || '',
               type: message.data.parsed.type || '',
               confidence: message.data.parsed.confidence || 0,
               timestamp: new Date().toISOString(),
             });
+          }
+          // 更新偏好和历史
+          if (message.data.preferences) {
+            setPreferences(message.data.preferences);
+          }
+          if (message.data.drawing_history) {
+            setDrawingHistory(message.data.drawing_history);
           }
           break;
         case 'canvas_state':
@@ -204,7 +220,7 @@ const VoicePanel: React.FC = () => {
           <div style={styles.processing}>⏳ 处理中...</div>
         )}
         {lastCommand && !isProcessing && (
-          <div style={styles.lastCommand}>{lastCommand}</div>
+          <div style={isError ? styles.errorMessage : styles.lastCommand}>{lastCommand}</div>
         )}
       </div>
 
@@ -313,6 +329,7 @@ const styles: Record<string, React.CSSProperties> = {
   transcript: { padding: '6px 12px', fontSize: '13px', color: '#4b5563', backgroundColor: '#f3f4f6', borderRadius: '6px', width: '100%', textAlign: 'center' },
   processing: { fontSize: '12px', color: '#6366f1', fontWeight: '500' },
   lastCommand: { fontSize: '12px', color: '#22c55e', fontWeight: '500' },
+  errorMessage: { fontSize: '12px', color: '#ef4444', fontWeight: '500', backgroundColor: '#fef2f2', padding: '4px 8px', borderRadius: '4px' },
   section: { padding: '12px 16px', borderBottom: '1px solid #e5e7eb' },
   sectionTitle: { fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' },
   quickGrid: { display: 'flex', flexWrap: 'wrap', gap: '6px' },

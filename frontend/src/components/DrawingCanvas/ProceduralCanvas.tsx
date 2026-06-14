@@ -1,15 +1,20 @@
 /**
  * 程序化绘图画布
- * 渲染后端发来的绘图指令
+ * 支持动画渲染：逐步显示绘图过程
  */
 
 import React, { useRef, useEffect, useCallback } from 'react';
 import { useDrawingStore, DrawingInstruction } from '../../store/drawingStore';
 
+const BATCH_SIZE = 8; // 每帧渲染的指令数
+
 const ProceduralCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animFrameRef = useRef<number>(0);
+  const pendingRef = useRef<DrawingInstruction[]>([]);
   const { instructions, background } = useDrawingStore();
 
+  // 渲染单条指令
   const renderInstruction = useCallback((ctx: CanvasRenderingContext2D, inst: DrawingInstruction) => {
     const { action, shape_type, params } = inst;
 
@@ -36,23 +41,68 @@ const ProceduralCanvas: React.FC = () => {
     }
   }, []);
 
+  // 动画渲染循环
+  const animate = useCallback((ctx: CanvasRenderingContext2D) => {
+    const batch = pendingRef.current.splice(0, BATCH_SIZE);
+    for (const inst of batch) {
+      renderInstruction(ctx, inst);
+    }
+    if (pendingRef.current.length > 0) {
+      animFrameRef.current = requestAnimationFrame(() => animate(ctx));
+    }
+  }, [renderInstruction]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 清空并绘制背景
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = background;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // 取消之前的动画
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
 
-    // 按 layer 排序后渲染
+    // 检查是否是增量更新（只有新增指令）
+    const isIncremental = instructions.length > 0 && instructions[0].action !== 'clear';
+
+    if (!isIncremental) {
+      // 全量重绘
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // 按 layer 排序
     const sorted = [...instructions].sort((a, b) => (a.layer || 0) - (b.layer || 0));
-    for (const inst of sorted) {
+
+    // 分离背景指令和绘制指令
+    const bgInstructions = sorted.filter(i => i.action === 'background' || i.action === 'clear');
+    const drawInstructions = sorted.filter(i => i.action === 'create' || i.action === 'batch');
+
+    // 立即渲染背景
+    for (const inst of bgInstructions) {
       renderInstruction(ctx, inst);
     }
-  }, [instructions, background, renderInstruction]);
+
+    // 动画渲染绘制指令
+    if (drawInstructions.length > 20) {
+      // 指令多时用动画
+      pendingRef.current = drawInstructions;
+      animate(ctx);
+    } else {
+      // 指令少时直接渲染
+      for (const inst of drawInstructions) {
+        renderInstruction(ctx, inst);
+      }
+    }
+
+    return () => {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+    };
+  }, [instructions, background, renderInstruction, animate]);
 
   return (
     <canvas
@@ -67,7 +117,6 @@ const ProceduralCanvas: React.FC = () => {
 function renderShape(ctx: CanvasRenderingContext2D, type: string, params: Record<string, any>) {
   ctx.save();
 
-  // 设置样式
   if (params.fill && params.fill !== 'transparent') {
     ctx.fillStyle = params.fill;
   }

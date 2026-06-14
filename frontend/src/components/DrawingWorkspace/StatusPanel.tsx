@@ -1,12 +1,16 @@
 /**
  * 状态面板 - 右侧面板
+ * 显示画布信息、用户偏好、绘图历史
  */
 
 import React from 'react';
 import { useDrawingStore } from '../../store/drawingStore';
 
 const StatusPanel: React.FC = () => {
-  const { background, shapeCount, lastCommand, connected, isProcessing } = useDrawingStore();
+  const {
+    background, shapeCount, lastCommand, connected, isProcessing,
+    preferences, drawingHistory,
+  } = useDrawingStore();
 
   const presets = [
     { id: 'flow_field', name: '流场', icon: ' ', desc: 'Perlin noise 粒子流' },
@@ -74,8 +78,67 @@ const StatusPanel: React.FC = () => {
         </div>
       )}
 
+      {/* User Preferences */}
+      {preferences && (
+        <div style={styles.section}>
+          <div style={styles.sectionTitle}>用户偏好</div>
+          <div style={styles.infoRow}>
+            <span style={styles.infoLabel}>总指令数</span>
+            <span style={styles.infoValue}>{preferences.total_commands}</span>
+          </div>
+          {preferences.favorite_colors.length > 0 && (
+            <div style={styles.prefGroup}>
+              <span style={styles.prefLabel}>常用颜色</span>
+              <div style={styles.colorChips}>
+                {preferences.favorite_colors.map((c, i) => (
+                  <div key={i} style={{ ...styles.colorChip, backgroundColor: c }} title={c} />
+                ))}
+              </div>
+            </div>
+          )}
+          {preferences.favorite_styles.length > 0 && (
+            <div style={styles.prefGroup}>
+              <span style={styles.prefLabel}>常用风格</span>
+              <div style={styles.tagChips}>
+                {preferences.favorite_styles.map((s, i) => (
+                  <span key={i} style={styles.tagChip}>{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {preferences.favorite_shapes.length > 0 && (
+            <div style={styles.prefGroup}>
+              <span style={styles.prefLabel}>常用形状</span>
+              <div style={styles.tagChips}>
+                {preferences.favorite_shapes.map((s, i) => (
+                  <span key={i} style={styles.tagChip}>{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Drawing History */}
+      {drawingHistory.length > 0 && (
+        <div style={{ ...styles.section, flex: 1, overflow: 'hidden' }}>
+          <div style={styles.sectionTitle}>绘图历史</div>
+          <div style={styles.historyList}>
+            {drawingHistory.slice().reverse().map((h, i) => (
+              <div key={i} style={styles.historyItem}>
+                <div style={styles.historyCmd}>{h.command}</div>
+                <div style={styles.historyMeta}>
+                  <span style={styles.historyResponse}>{h.response}</span>
+                  <span style={styles.historyCount}>{h.shape_count} 图形</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Presets Gallery */}
-      <div style={{ ...styles.section, flex: 1, overflow: 'hidden' }}>
+      <div style={{ ...styles.section, flex: drawingHistory.length > 0 ? undefined : 1, overflow: 'hidden' }}>
         <div style={styles.sectionTitle}>预设画廊</div>
         <div style={styles.presetsGrid}>
           {presets.map((p) => (
@@ -130,6 +193,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '12px', color: '#6366f1', fontWeight: '500',
     padding: '6px 12px', backgroundColor: '#eef2ff', borderRadius: '6px', textAlign: 'center',
   },
+  prefGroup: { marginTop: '8px' },
+  prefLabel: { fontSize: '11px', color: '#9ca3af', marginBottom: '4px', display: 'block' },
+  colorChips: { display: 'flex', gap: '4px', flexWrap: 'wrap' },
+  colorChip: { width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #d1d5db' },
+  tagChips: { display: 'flex', gap: '4px', flexWrap: 'wrap' },
+  tagChip: {
+    padding: '2px 8px', fontSize: '10px', backgroundColor: '#f3f4f6',
+    borderRadius: '10px', color: '#4b5563',
+  },
+  historyList: { overflowY: 'auto', maxHeight: '200px' },
+  historyItem: { padding: '6px 0', borderBottom: '1px solid #f3f4f6' },
+  historyCmd: { fontSize: '12px', color: '#111827', marginBottom: '2px' },
+  historyMeta: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  historyResponse: { fontSize: '10px', color: '#22c55e' },
+  historyCount: { fontSize: '10px', color: '#9ca3af' },
   presetsGrid: {
     display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px',
     overflowY: 'auto', maxHeight: '100%',
