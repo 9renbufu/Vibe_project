@@ -188,8 +188,7 @@ class DrawingWSHandler:
             yield result
 
     async def _handle_command_stream(self, session: DrawingSession, text: str) -> AsyncGenerator[dict, None]:
-        """流式处理绘图指令，分批返回"""
-        # 确保有活跃记录
+        """流式处理绘图指令，分批返回，支持复合指令"""
         record_id = session.get_active_record_id()
         engine = session.get_active_engine()
 
@@ -204,6 +203,9 @@ class DrawingWSHandler:
         response_text = ""
         all_instructions = []
         error = False
+
+        # 复合指令：收集所有子指令的结果
+        compound_parts = parsed.params.get("compound_parts", [])
 
         try:
             if parsed.command_type == CommandType.DRAW_SHAPE:
@@ -269,6 +271,18 @@ class DrawingWSHandler:
         except Exception as e:
             response_text = f"执行出错: {str(e)}"
             error = True
+
+        # 执行复合指令的后续部分
+        if not error and compound_parts:
+            for part in compound_parts:
+                try:
+                    sub_parsed = parse_command(part)
+                    sub_insts = await self._execute_single(engine, sub_parsed)
+                    all_instructions.extend(sub_insts)
+                    if sub_parsed.command_type != CommandType.UNKNOWN:
+                        response_text += f"，然后{self._describe_command(sub_parsed)}"
+                except Exception:
+                    pass
 
         if not error:
             session.update_preferences(parsed)
@@ -433,6 +447,86 @@ class DrawingWSHandler:
             }
 
         return {"type": "error", "data": {"message": f"未知消息类型: {msg_type}"}}
+
+    async def _execute_single(self, engine: DrawingEngine, parsed) -> list:
+        """执行单条解析后的指令，返回指令列表"""
+        if parsed.command_type == CommandType.DRAW_SHAPE:
+            return engine.draw_shape(
+                shape_type=parsed.shape_type or "circle",
+                color=parsed.color,
+                size=parsed.size,
+                position=parsed.position,
+            )
+
+        elif parsed.command_type == CommandType.DRAW_ART:
+            art_type = parsed.art_type or "flow_field"
+            engine_method = getattr(engine, f"generate_{art_type}", None)
+            if engine_method:
+                return await asyncio.to_thread(engine_method, {"color": parsed.color, "append": True})
+            return []
+
+        elif parsed.command_type == CommandType.DRAW_SCENE:
+            scene_type = parsed.scene_type or "sunset"
+            return await asyncio.to_thread(
+                engine.generate_landscape, scene_type, {"color": parsed.color, "append": True}
+            )
+
+        elif parsed.command_type == CommandType.SET_COLOR:
+            engine.current_color = parsed.color or (50, 50, 50)
+            return []
+
+        elif parsed.command_type == CommandType.SET_SIZE:
+            engine.current_size = parsed.size or 80
+            return []
+
+        elif parsed.command_type == CommandType.UNDO:
+            return engine.undo()
+
+        elif parsed.command_type == CommandType.REDO:
+            return engine.redo()
+
+        elif parsed.command_type == CommandType.CLEAR:
+            return engine.clear()
+
+        return []
+
+    def _describe_command(self, parsed) -> str:
+        """返回指令的可读描述"""
+        if parsed.command_type == CommandType.DRAW_SHAPE:
+            return f"画了{parsed.shape_type or '圆形'}"
+
+        elif parsed.command_type == CommandType.DRAW_ART:
+            art_names = {
+                "flow_field": "流场", "fractal_tree": "分形树", "watercolor": "水彩",
+                "mandala": "曼陀罗", "spirograph": "螺线", "voronoi": "沃罗诺伊",
+                "particle": "粒子", "wave": "波浪", "stripe": "条纹", "gradient": "渐变",
+            }
+            return f"生成了{art_names.get(parsed.art_type, parsed.art_type)}"
+
+        elif parsed.command_type == CommandType.DRAW_SCENE:
+            scene_names = {
+                "sunset": "日落", "ocean": "海洋", "mountain": "山脉",
+                "starry_sky": "星空", "forest": "森林", "grassland": "草原",
+                "desert": "沙漠", "snow": "雪景", "spring": "春天花海",
+            }
+            return f"绘制了{scene_names.get(parsed.scene_type, parsed.scene_type)}"
+
+        elif parsed.command_type == CommandType.SET_COLOR:
+            return f"改了颜色"
+
+        elif parsed.command_type == CommandType.SET_SIZE:
+            return f"改了大小"
+
+        elif parsed.command_type == CommandType.UNDO:
+            return "撤销"
+
+        elif parsed.command_type == CommandType.REDO:
+            return "重做"
+
+        elif parsed.command_type == CommandType.CLEAR:
+            return "清空了画布"
+
+        return ""
 
     async def _handle_command(self, session: DrawingSession, text: str) -> dict:
         """非流式处理（备用）"""

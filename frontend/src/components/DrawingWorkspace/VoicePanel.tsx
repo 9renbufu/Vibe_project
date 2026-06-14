@@ -6,9 +6,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDrawingStore } from '../../store/drawingStore';
 import { setWs, sendCommand as wsSendCommand, sendMessage } from '../../store/wsManager';
 
+const WAKE_WORDS = ['小画', '小华', '小花', '开始画', '画画'];
+
 const VoicePanel: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [isError, setIsError] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);  // true = 纯语音模式
+  const [wakeState, setWakeState] = useState<'passive' | 'active'>('passive');  // passive=等唤醒词, active=等指令
   const {
     isListening, transcript, connected, isProcessing,
     commandHistory, lastCommand,
@@ -19,6 +23,8 @@ const VoicePanel: React.FC = () => {
 
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
+  const voiceModeRef = useRef(false);
+  const wakeStateRef = useRef<'passive' | 'active'>('passive');
 
   // WebSocket 连接
   useEffect(() => {
@@ -159,6 +165,48 @@ const VoicePanel: React.FC = () => {
           interim += event.results[i][0].transcript;
         }
       }
+
+      // 纯语音模式：唤醒词检测
+      if (voiceModeRef.current) {
+        const text = (interim || final).trim();
+        if (wakeStateRef.current === 'passive') {
+          // 被动模式：检测唤醒词
+          setTranscript(`等待唤醒... (${text})`);
+          if (final) {
+            const lower = final.trim();
+            const hasWake = WAKE_WORDS.some(w => lower.includes(w));
+            if (hasWake) {
+              // 唤醒词命中，切换到主动模式
+              wakeStateRef.current = 'active';
+              setWakeState('active');
+              setTranscript('  已唤醒，请说指令...');
+            }
+          }
+          return;
+        }
+
+        // 主动模式：接收指令
+        setTranscript(interim || final);
+        if (final) {
+          // 去掉可能残留的唤醒词
+          let cmd = final.trim();
+          for (const w of WAKE_WORDS) {
+            if (cmd.startsWith(w)) {
+              cmd = cmd.slice(w.length).trim();
+            }
+          }
+          if (cmd) {
+            sendCommand(cmd);
+          }
+          // 回到被动模式
+          wakeStateRef.current = 'passive';
+          setWakeState('passive');
+          setTimeout(() => setTranscript(''), 1500);
+        }
+        return;
+      }
+
+      // 普通模式：直接处理
       setTranscript(interim || final);
       if (final) {
         sendCommand(final);
@@ -188,10 +236,31 @@ const VoicePanel: React.FC = () => {
       isListeningRef.current = false;
       recognitionRef.current.stop();
       setIsListening(false);
+      wakeStateRef.current = 'passive';
+      setWakeState('passive');
     } else {
       isListeningRef.current = true;
+      wakeStateRef.current = voiceMode ? 'passive' : 'active';
+      setWakeState(voiceMode ? 'passive' : 'active');
       recognitionRef.current.start();
       setIsListening(true);
+    }
+  };
+
+  // 切换纯语音模式
+  const toggleVoiceMode = () => {
+    const next = !voiceMode;
+    setVoiceMode(next);
+    voiceModeRef.current = next;
+    // 切换时重置唤醒状态
+    wakeStateRef.current = next ? 'passive' : 'active';
+    setWakeState(next ? 'passive' : 'active');
+    // 如果正在录音，重启以应用新模式
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setTimeout(() => {
+        try { recognitionRef.current.start(); } catch (e) {}
+      }, 100);
     }
   };
 
@@ -232,6 +301,13 @@ const VoicePanel: React.FC = () => {
           <span style={styles.title}>Voice Drawing</span>
         </div>
         <div style={styles.headerRight}>
+          <button
+            style={{ ...styles.modeToggleBtn, ...(voiceMode ? styles.modeToggleActive : {}) }}
+            onClick={toggleVoiceMode}
+            title={voiceMode ? '切换到文字模式' : '切换到纯语音模式'}
+          >
+            {voiceMode ? '  纯语音' : '⌨ 文字'}
+          </button>
           <div style={{ ...styles.statusDot, backgroundColor: connected ? '#22c55e' : '#ef4444' }} />
           <button style={styles.resetBtn} onClick={handleReset}>重置</button>
         </div>
@@ -243,15 +319,20 @@ const VoicePanel: React.FC = () => {
           onClick={toggleListening}
           disabled={!isSupported}
           style={{
-            ...styles.micBtn,
-            ...(isListening ? styles.micBtnActive : {}),
+            ...(voiceMode ? styles.micBtnLarge : styles.micBtn),
+            ...(isListening ? (voiceMode && wakeState === 'passive' ? styles.micBtnPassive : styles.micBtnActive) : {}),
             ...(!isSupported ? styles.micBtnDisabled : {}),
           }}
         >
-          {isListening ? '⏹' : ' '}
+          {isListening ? (voiceMode && wakeState === 'passive' ? ' ' : '⏹') : ' '}
         </button>
         {!isSupported && (
           <div style={styles.warning}>浏览器不支持语音识别，请使用 Chrome</div>
+        )}
+        {voiceMode && isListening && (
+          <div style={wakeState === 'passive' ? styles.wakeHint : styles.wakeActive}>
+            {wakeState === 'passive' ? '  说"小画"唤醒我' : '  请说指令...'}
+          </div>
         )}
         {transcript && (
           <div style={styles.transcript}>{transcript}</div>
@@ -320,28 +401,30 @@ const VoicePanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Input */}
-      <div style={styles.inputArea}>
-        <form style={styles.inputForm} onSubmit={handleSubmit}>
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="输入绘图指令..."
-            style={styles.input}
-          />
-          <button
-            type="submit"
-            disabled={!inputText.trim()}
-            style={{
-              ...styles.sendBtn,
-              ...(!inputText.trim() ? styles.sendBtnDisabled : {}),
-            }}
-          >
-            ➤
-          </button>
-        </form>
-      </div>
+      {/* Input - 纯语音模式下隐藏 */}
+      {!voiceMode && (
+        <div style={styles.inputArea}>
+          <form style={styles.inputForm} onSubmit={handleSubmit}>
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="输入绘图指令..."
+              style={styles.input}
+            />
+            <button
+              type="submit"
+              disabled={!inputText.trim()}
+              style={{
+                ...styles.sendBtn,
+                ...(!inputText.trim() ? styles.sendBtnDisabled : {}),
+              }}
+            >
+              ➤
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 };
@@ -410,6 +493,32 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: '#d1d5db', cursor: 'not-allowed' },
+  modeToggleBtn: {
+    padding: '4px 10px', fontSize: '11px', border: '1px solid #d1d5db',
+    borderRadius: '12px', backgroundColor: '#fff', cursor: 'pointer',
+    color: '#6b7280', transition: 'all 0.2s', whiteSpace: 'nowrap',
+  },
+  modeToggleActive: {
+    backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1',
+  },
+  micBtnLarge: {
+    width: '80px', height: '80px', border: '3px solid #d1d5db', borderRadius: '50%',
+    backgroundColor: '#fff', cursor: 'pointer', fontSize: '32px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+  },
+  micBtnPassive: {
+    backgroundColor: '#eff6ff', borderColor: '#3b82f6',
+    boxShadow: '0 0 16px rgba(59,130,246,0.25)', animation: 'pulse 2s ease-in-out infinite',
+  },
+  wakeHint: {
+    fontSize: '12px', color: '#3b82f6', fontWeight: '500',
+    padding: '4px 12px', backgroundColor: '#eff6ff', borderRadius: '12px',
+  },
+  wakeActive: {
+    fontSize: '12px', color: '#22c55e', fontWeight: '500',
+    padding: '4px 12px', backgroundColor: '#f0fdf4', borderRadius: '12px',
+  },
 };
 
 export default VoicePanel;

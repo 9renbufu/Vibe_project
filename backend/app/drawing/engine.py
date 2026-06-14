@@ -525,6 +525,217 @@ class DrawingEngine:
         ))
         return instructions
 
+    # ============ 粒子效果 ============
+    def generate_particle(self, params: Optional[Dict] = None) -> List[DrawingInstruction]:
+        self._save_state()
+        params = params or {}
+        palette_name = params.get("palette", "neon")
+        palette = PALETTES.get(palette_name, PALETTES["neon"])
+        append_mode = params.get("append", False)
+
+        instructions = []
+        if not append_mode:
+            self.shapes = []
+            self.background = (15, 15, 30)
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+
+        cx, cy = self.width / 2, self.height / 2
+        particle_count = params.get("count", 200)
+
+        for _ in range(particle_count):
+            angle = random.uniform(0, math.pi * 2)
+            speed = random.uniform(20, 200)
+            x = cx + math.cos(angle) * speed
+            y = cy + math.sin(angle) * speed
+            radius = random.uniform(1.5, 6)
+            color = _color_with_alpha(random.choice(palette), random.uniform(0.4, 0.9))
+            shape_params = {"cx": x, "cy": y, "radius": radius, "fill": color, "stroke": "transparent"}
+            self._add_shape("circle", shape_params, layer=0)
+
+        # 添加几条射线
+        for _ in range(8):
+            angle = random.uniform(0, math.pi * 2)
+            length = random.uniform(100, 300)
+            x2 = cx + math.cos(angle) * length
+            y2 = cy + math.sin(angle) * length
+            color = _color_with_alpha(random.choice(palette), 0.3)
+            shape_params = {"x1": cx, "y1": cy, "x2": x2, "y2": y2, "stroke": color, "strokeWidth": random.uniform(0.5, 2)}
+            self._add_shape("line", shape_params, layer=1)
+
+        instructions.append(DrawingInstruction(action="batch", params={"shapes": self.shapes.copy()}, layer=0))
+        return instructions
+
+    # ============ 波浪 ============
+    def generate_wave(self, params: Optional[Dict] = None) -> List[DrawingInstruction]:
+        self._save_state()
+        params = params or {}
+        palette_name = params.get("palette", "ocean")
+        palette = PALETTES.get(palette_name, PALETTES["ocean"])
+        append_mode = params.get("append", False)
+
+        instructions = []
+        if not append_mode:
+            self.shapes = []
+            self.background = (240, 248, 255)
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+
+        wave_count = 12
+        for i in range(wave_count):
+            y_base = 100 + i * (self.height - 200) / wave_count
+            amplitude = random.uniform(15, 40)
+            frequency = random.uniform(0.005, 0.015)
+            phase = random.uniform(0, math.pi * 2)
+            color = _color_with_alpha(random.choice(palette), random.uniform(0.3, 0.7))
+
+            points = []
+            for x in range(0, self.width + 1, 4):
+                y = y_base + math.sin(x * frequency + phase) * amplitude
+                y += math.sin(x * frequency * 2.3 + phase * 1.7) * amplitude * 0.3
+                points.append({"x": x, "y": y})
+
+            shape_params = {"points": points, "stroke": color, "strokeWidth": random.uniform(1.5, 3.5)}
+            self._add_shape("path", shape_params, layer=i)
+
+        instructions.append(DrawingInstruction(action="batch", params={"shapes": self.shapes.copy()}, layer=0))
+        return instructions
+
+    # ============ 条纹 ============
+    def generate_stripe(self, params: Optional[Dict] = None) -> List[DrawingInstruction]:
+        self._save_state()
+        params = params or {}
+        palette_name = params.get("palette", "warm")
+        palette = PALETTES.get(palette_name, PALETTES["warm"])
+        append_mode = params.get("append", False)
+
+        instructions = []
+        if not append_mode:
+            self.shapes = []
+            self.background = (255, 255, 255)
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+
+        stripe_type = random.choice(["horizontal", "vertical", "diagonal", "wave"])
+
+        if stripe_type == "horizontal":
+            stripe_h = random.randint(15, 40)
+            for y in range(0, self.height, stripe_h * 2):
+                color = _color_with_alpha(random.choice(palette), random.uniform(0.6, 0.9))
+                shape_params = {"x": 0, "y": y, "width": self.width, "height": stripe_h, "fill": color, "stroke": "transparent"}
+                self._add_shape("rect", shape_params, layer=0)
+
+        elif stripe_type == "vertical":
+            stripe_w = random.randint(15, 40)
+            for x in range(0, self.width, stripe_w * 2):
+                color = _color_with_alpha(random.choice(palette), random.uniform(0.6, 0.9))
+                shape_params = {"x": x, "y": 0, "width": stripe_w, "height": self.height, "fill": color, "stroke": "transparent"}
+                self._add_shape("rect", shape_params, layer=0)
+
+        elif stripe_type == "diagonal":
+            stripe_w = random.randint(20, 50)
+            for i in range(-self.height, self.width + self.height, stripe_w * 2):
+                points = [
+                    {"x": i, "y": 0},
+                    {"x": i + stripe_w, "y": 0},
+                    {"x": i + stripe_w - self.height, "y": self.height},
+                    {"x": i - self.height, "y": self.height},
+                ]
+                color = _color_with_alpha(random.choice(palette), random.uniform(0.5, 0.8))
+                shape_params = {"points": points, "fill": color, "stroke": "transparent"}
+                self._add_shape("polygon", shape_params, layer=0)
+
+        else:  # wave
+            for i in range(10):
+                y_base = i * self.height / 10
+                points = []
+                for x in range(0, self.width + 1, 5):
+                    y = y_base + math.sin(x * 0.02 + i) * 20
+                    points.append({"x": x, "y": y})
+                for x in range(self.width, -1, -5):
+                    y = y_base + self.height / 12 + math.sin(x * 0.02 + i) * 20
+                    points.append({"x": x, "y": y})
+                color = _color_with_alpha(random.choice(palette), random.uniform(0.4, 0.7))
+                shape_params = {"points": points, "fill": color, "stroke": "transparent"}
+                self._add_shape("polygon", shape_params, layer=0)
+
+        instructions.append(DrawingInstruction(action="batch", params={"shapes": self.shapes.copy()}, layer=0))
+        return instructions
+
+    # ============ 渐变 ============
+    def generate_gradient(self, params: Optional[Dict] = None) -> List[DrawingInstruction]:
+        self._save_state()
+        params = params or {}
+        palette_name = params.get("palette", "sunset")
+        palette = PALETTES.get(palette_name, PALETTES["sunset"])
+        append_mode = params.get("append", False)
+
+        instructions = []
+        if not append_mode:
+            self.shapes = []
+            self.background = palette[0]
+            instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
+
+        gradient_type = random.choice(["linear", "radial", "conic"])
+
+        if gradient_type == "linear":
+            direction = random.choice(["vertical", "horizontal", "diagonal"])
+            steps = 40
+            for i in range(steps):
+                t = i / (steps - 1)
+                c1 = palette[0] if len(palette) > 0 else (255, 255, 255)
+                c2 = palette[1] if len(palette) > 1 else (0, 0, 0)
+                r = int(c1[0] + (c2[0] - c1[0]) * t)
+                g = int(c1[1] + (c2[1] - c1[1]) * t)
+                b = int(c1[2] + (c2[2] - c1[2]) * t)
+                color = f"rgb({r},{g},{b})"
+
+                if direction == "vertical":
+                    h = self.height // steps + 1
+                    shape_params = {"x": 0, "y": i * self.height // steps, "width": self.width, "height": h, "fill": color, "stroke": "transparent"}
+                elif direction == "horizontal":
+                    w = self.width // steps + 1
+                    shape_params = {"x": i * self.width // steps, "y": 0, "width": w, "height": self.height, "fill": color, "stroke": "transparent"}
+                else:
+                    h = self.height // steps + 1
+                    shape_params = {"x": 0, "y": i * self.height // steps, "width": self.width, "height": h, "fill": color, "stroke": "transparent"}
+                self._add_shape("rect", shape_params, layer=0)
+
+        elif gradient_type == "radial":
+            cx, cy = self.width / 2, self.height / 2
+            max_r = max(self.width, self.height) / 2
+            steps = 30
+            for i in range(steps, 0, -1):
+                t = i / steps
+                r = max_r * t
+                c1 = palette[0] if len(palette) > 0 else (255, 255, 255)
+                c2 = palette[1] if len(palette) > 1 else (0, 0, 0)
+                cr = int(c1[0] + (c2[0] - c1[0]) * (1 - t))
+                cg = int(c1[1] + (c2[1] - c1[1]) * (1 - t))
+                cb = int(c1[2] + (c2[2] - c1[2]) * (1 - t))
+                color = f"rgb({cr},{cg},{cb})"
+                shape_params = {"cx": cx, "cy": cy, "radius": r, "fill": color, "stroke": "transparent"}
+                self._add_shape("circle", shape_params, layer=0)
+
+        else:  # conic
+            cx, cy = self.width / 2, self.height / 2
+            max_r = max(self.width, self.height) * 0.6
+            steps = 36
+            for i in range(steps):
+                angle1 = i * math.pi * 2 / steps
+                angle2 = (i + 1) * math.pi * 2 / steps
+                t = i / steps
+                ci = int(t * len(palette)) % len(palette) if palette else 0
+                ci_next = (ci + 1) % len(palette) if palette else 0
+                color = _color_with_alpha(palette[ci] if palette else (200, 200, 200), 0.8)
+                points = [
+                    {"x": cx, "y": cy},
+                    {"x": cx + math.cos(angle1) * max_r, "y": cy + math.sin(angle1) * max_r},
+                    {"x": cx + math.cos(angle2) * max_r, "y": cy + math.sin(angle2) * max_r},
+                ]
+                shape_params = {"points": points, "fill": color, "stroke": "transparent"}
+                self._add_shape("polygon", shape_params, layer=0)
+
+        instructions.append(DrawingInstruction(action="batch", params={"shapes": self.shapes.copy()}, layer=0))
+        return instructions
+
     # ============ 风景场景 ============
     def generate_landscape(self, scene_type: str = "sunset", params: Optional[Dict] = None) -> List[DrawingInstruction]:
         self._save_state()

@@ -1,6 +1,6 @@
 """
 中文语音指令解析引擎
-使用 jieba 分词 + 正则匹配，不依赖 LLM
+支持同音字容错、组合指令拆解、优先级修正
 """
 
 import re
@@ -40,9 +40,45 @@ class ParsedCommand:
     position_name: Optional[str] = None
     art_type: Optional[str] = None
     scene_type: Optional[str] = None
+    count: int = 1  # 数量参数
     params: Dict[str, Any] = field(default_factory=dict)
     raw_text: str = ""
     confidence: float = 0.0
+
+
+# ============ 同音字/近音字纠错映射 ============
+HOMOPHONE_MAP: Dict[str, str] = {
+    # 形状同音字
+    "元形": "圆形", "园形": "圆形", "原形": "圆形",
+    "圆形": "圆形", "元形": "圆形",
+    "三角型": "三角形", "三角行": "三角形",
+    "矩行": "矩形", "矩型": "矩形",
+    "心型": "心形", "星型": "星形",
+    "椭圆型": "椭圆形",
+    # 颜色同音字
+    "红涩": "红色", "红社": "红色",
+    "蓝涩": "蓝色", "蓝社": "蓝色",
+    "绿涩": "绿色", "绿社": "绿色",
+    "黄涩": "黄色",
+    "紫涩": "紫色",
+    "黑涩": "黑色", "嘿色": "黑色",
+    "百色": "白色", "拜色": "白色",
+    # 动作同音字
+    "花": "画", "话": "画", "化": "画",
+    "话一个": "画一个", "花一个": "画一个",
+    # 场景同音字
+    "日": "日落", "夕阳": "日落",
+    "新空": "星空", "心空": "星空",
+}
+
+# ============ 语气词/填充词 ============
+FILLER_WORDS = [
+    "的", "了", "呢", "吧", "啊", "呀", "哦", "嘛", "哈",
+    "嗯", "呃", "那个", "就是", "然后", "接着", "再",
+    "请", "帮我", "能不能", "可以", "我想", "我要",
+    "一个", "一幅", "一张", "一条", "一根", "一棵",
+    "个", "幅", "张", "条", "根", "棵",
+]
 
 
 # ============ 颜色映射 ============
@@ -126,17 +162,24 @@ SCENE_MAP: Dict[str, str] = {
 }
 
 
-def _segment_text(text: str) -> List[str]:
-    """中文分词"""
-    if HAS_JIEBA:
-        return list(jieba.cut(text))
-    # 简单回退：按字符切分
-    return list(text)
+def _correct_homophones(text: str) -> str:
+    """同音字纠错"""
+    for wrong, right in HOMOPHONE_MAP.items():
+        text = text.replace(wrong, right)
+    return text
+
+
+def _clean_text(text: str) -> str:
+    """预处理：去标点、纠错、去语气词"""
+    # 去标点和空白
+    clean = re.sub(r'[，。！？、；：""''（）\s]+', '', text)
+    # 同音字纠错
+    clean = _correct_homophones(clean)
+    return clean
 
 
 def _extract_color(text: str) -> Optional[Tuple[int, int, int]]:
     """提取颜色"""
-    # 先尝试精确匹配
     for name, rgb in COLOR_MAP.items():
         if name in text:
             return rgb
@@ -156,7 +199,6 @@ def _extract_position(text: str) -> Optional[Tuple[float, float]]:
     for name, pos in POSITION_MAP.items():
         if name in text:
             return pos
-    # 尝试提取像素坐标
     px_match = re.search(r'(\d+)\s*[像素px,，]\s*(\d+)', text)
     if px_match:
         return (float(px_match.group(1)) / 1200, float(px_match.group(2)) / 800)
@@ -175,11 +217,26 @@ def _extract_size(text: str) -> Optional[float]:
     for name, size in size_map.items():
         if name in text:
             return size
-    # 尝试提取数字
     num_match = re.search(r'(\d+)\s*(?:像素|px|大小|半径)', text)
     if num_match:
         return float(num_match.group(1))
     return None
+
+
+def _extract_count(text: str) -> int:
+    """提取数量"""
+    count_map = {
+        "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
+        "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+    }
+    for word, num in count_map.items():
+        # 匹配 "画三个"、"画五 个" 等
+        if re.search(rf'{word}\s*个|{word}\s*条|{word}\s*根|{word}\s*棵', text):
+            return num
+    num_match = re.search(r'(\d+)\s*[个条根棵幅张]', text)
+    if num_match:
+        return int(num_match.group(1))
+    return 1
 
 
 def _extract_art_type(text: str) -> Optional[str]:
@@ -212,16 +269,21 @@ def _extract_direction(text: str) -> Optional[str]:
     return None
 
 
-def parse_command(text: str) -> ParsedCommand:
-    """主解析入口"""
-    text = text.strip()
-    if not text:
-        return ParsedCommand(command_type=CommandType.UNKNOWN, raw_text=text)
+def _has_draw_intent(text: str) -> bool:
+    """检测是否包含绘图意图动词"""
+    return bool(re.search(r'画|创建|来|做|生成|画一幅|画一个|画个|画条|画根|花一个|话一个', text))
 
-    # 预处理：去标点
-    clean = re.sub(r'[，。！？、；：""''（）\s]+', '', text)
 
-    # ============ 撤销/重做/清空 ============
+def _split_compound(text: str) -> List[str]:
+    """拆分复合指令：按'然后'、'接着'、'再'、'还有'分句"""
+    parts = re.split(r'然后|接着|再|还有|并且|同时|之后', text)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _parse_single(text: str, clean: str) -> ParsedCommand:
+    """解析单条指令（已纠错的文本）"""
+
+    # ============ 撤销/重做/清空（最高优先级）============
     if re.search(r'撤销|回退|后悔|返回上一步|上一步', clean):
         return ParsedCommand(command_type=CommandType.UNDO, raw_text=text, confidence=0.95)
 
@@ -251,26 +313,34 @@ def parse_command(text: str) -> ParsedCommand:
             raw_text=text, confidence=0.9,
         )
 
-    # ============ 设置颜色 ============
+    # ============ 提取所有属性 ============
     color = _extract_color(clean)
-    if color and re.search(r'改|换|变|设置|设为|颜色|涂|填充', clean):
-        return ParsedCommand(
-            command_type=CommandType.SET_COLOR,
-            color=color, raw_text=text, confidence=0.85,
-        )
-
-    # ============ 设置大小 ============
-    size = _extract_size(clean)
-    if size and re.search(r'大小|尺寸|粗细|调|改|变', clean):
-        return ParsedCommand(
-            command_type=CommandType.SET_SIZE,
-            size=size, raw_text=text, confidence=0.85,
-        )
-
-    # ============ 程序化艺术 ============
+    shape = _extract_shape(clean)
     art_type = _extract_art_type(clean)
-    if art_type and re.search(r'画|生成|创建|来|做|画一幅|画一个', clean):
-        color = color or _extract_color(clean)
+    scene_type = _extract_scene_type(clean)
+    pos = _extract_position(clean)
+    size = _extract_size(clean)
+    count = _extract_count(clean)
+    has_draw = _has_draw_intent(clean)
+
+    # ============ 纯设置颜色（无形状/艺术/场景，且有明确的颜色设置动词）============
+    if color and not shape and not art_type and not scene_type:
+        if re.search(r'改.*颜色|换.*颜色|变.*颜色|设置.*颜色|颜色.*改|颜色.*换|颜色.*设|涂|填充|把.*色', clean):
+            return ParsedCommand(
+                command_type=CommandType.SET_COLOR,
+                color=color, raw_text=text, confidence=0.85,
+            )
+
+    # ============ 纯设置大小（无形状/艺术/场景）============
+    if size and not shape and not art_type and not scene_type:
+        if re.search(r'大小|尺寸|粗细|调.*大|调.*小|改.*大|改.*小', clean):
+            return ParsedCommand(
+                command_type=CommandType.SET_SIZE,
+                size=size, raw_text=text, confidence=0.85,
+            )
+
+    # ============ 程序化艺术（优先级高于形状）============
+    if art_type:
         return ParsedCommand(
             command_type=CommandType.DRAW_ART,
             art_type=art_type, color=color,
@@ -278,23 +348,20 @@ def parse_command(text: str) -> ParsedCommand:
         )
 
     # ============ 场景 ============
-    scene_type = _extract_scene_type(clean)
-    if scene_type and re.search(r'画|生成|创建|风景|场景', clean):
+    if scene_type:
         return ParsedCommand(
             command_type=CommandType.DRAW_SCENE,
             scene_type=scene_type, color=color,
             raw_text=text, confidence=0.9,
         )
 
-    # ============ 基础图形 ============
-    shape = _extract_shape(clean)
-    if shape and re.search(r'画|创建|来一个|来个|画一个|画个|画条|画一根', clean):
-        pos = _extract_position(clean)
+    # ============ 基础图形（组合指令：颜色+形状+位置+大小+数量）============
+    if shape:
         return ParsedCommand(
             command_type=CommandType.DRAW_SHAPE,
             shape_type=shape, color=color,
-            size=size, position=pos,
-            raw_text=text, confidence=0.85,
+            size=size, position=pos, count=count,
+            raw_text=text, confidence=0.85 if has_draw else 0.6,
         )
 
     # ============ 填充 ============
@@ -304,31 +371,42 @@ def parse_command(text: str) -> ParsedCommand:
             color=color, raw_text=text, confidence=0.8,
         )
 
-    # ============ 模糊匹配：尝试从全文中提取意图 ============
-    # 可能是 "红色的圆" 这种没动词的表达
-    if shape:
-        return ParsedCommand(
-            command_type=CommandType.DRAW_SHAPE,
-            shape_type=shape, color=color,
-            size=size, position=_extract_position(clean),
-            raw_text=text, confidence=0.6,
-        )
-
-    if art_type:
-        return ParsedCommand(
-            command_type=CommandType.DRAW_ART,
-            art_type=art_type, color=color,
-            raw_text=text, confidence=0.6,
-        )
-
-    if scene_type:
-        return ParsedCommand(
-            command_type=CommandType.DRAW_SCENE,
-            scene_type=scene_type, color=color,
-            raw_text=text, confidence=0.6,
-        )
+    # ============ 模糊匹配：有绘图意图但没匹配到形状/艺术 ============
+    if has_draw:
+        # 尝试从文本推断
+        if color:
+            # "画红色的" - 默认画圆
+            return ParsedCommand(
+                command_type=CommandType.DRAW_SHAPE,
+                shape_type="circle", color=color,
+                size=size, position=pos,
+                raw_text=text, confidence=0.5,
+            )
 
     return ParsedCommand(
         command_type=CommandType.UNKNOWN,
         raw_text=text, confidence=0.0,
     )
+
+
+def parse_command(text: str) -> ParsedCommand:
+    """主解析入口"""
+    text = text.strip()
+    if not text:
+        return ParsedCommand(command_type=CommandType.UNKNOWN, raw_text=text)
+
+    # 预处理：纠错 + 去标点
+    clean = _clean_text(text)
+
+    # 检查是否是复合指令（包含"然后"、"接着"、"再"等）
+    parts = _split_compound(clean)
+    if len(parts) > 1:
+        # 复合指令：解析第一部分，返回最高优先级的结果
+        # 后续部分由调用方循环处理
+        first = _parse_single(text, parts[0])
+        # 把剩余部分存入 params 供后续处理
+        first.params["compound_parts"] = parts[1:]
+        first.confidence = max(first.confidence - 0.05, 0.3)
+        return first
+
+    return _parse_single(text, clean)
