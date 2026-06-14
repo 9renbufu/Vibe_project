@@ -14,7 +14,8 @@ class DrawingAgent:
     """绘图智能助手：纠错、评估、修改建议"""
 
     def __init__(self, llm_client: BaseLLMClient, vision_client: BaseLLMClient = None):
-        self.llm = llm_client
+        # 优先使用 vision client（通常是更强的模型如 GPT-5.4）
+        self.llm = vision_client or llm_client
         self.vision = vision_client
 
     # ============ 指令纠错 ============

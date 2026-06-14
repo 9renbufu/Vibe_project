@@ -154,6 +154,7 @@ SCENE_MAP: Dict[str, str] = {
     "海洋": "ocean", "大海": "ocean", "海": "ocean", "海边": "ocean",
     "山": "mountain", "山脉": "mountain", "群山": "mountain", "高山": "mountain",
     "星空": "starry_sky", "夜空": "starry_sky", "夜晚": "starry_sky",
+    "太空": "starry_sky", "宇宙": "starry_sky", "星河": "starry_sky", "银河": "starry_sky",
     "森林": "forest", "树林": "forest", "丛林": "forest",
     "草原": "grassland", "草地": "grassland",
     "沙漠": "desert", "沙丘": "desert",

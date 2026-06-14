@@ -169,6 +169,7 @@ class DrawingWSHandler:
     def __init__(self, llm_client=None, vision_client=None):
         self.sessions: Dict[str, DrawingSession] = {}
         self.agent = DrawingAgent(llm_client, vision_client) if llm_client else None
+        self._ws_send_callback = None  # WebSocket 推送回调
 
     def create_session(self, width: int = 1200, height: int = 800) -> DrawingSession:
         session = DrawingSession(width, height)
@@ -372,8 +373,7 @@ class DrawingWSHandler:
 
         # 绘制完成后自动评估（不阻塞响应）
         if self.agent and not error and len(all_instructions) > 0:
-            send_cb = self._ws_send_callback if hasattr(self, '_ws_send_callback') else None
-            asyncio.create_task(self._evaluate_async(session, engine, send_cb))
+            asyncio.create_task(self._evaluate_async(session, engine, self._ws_send_callback))
 
     async def _evaluate_async(self, session: DrawingSession, engine: DrawingEngine,
                                send_callback=None):
