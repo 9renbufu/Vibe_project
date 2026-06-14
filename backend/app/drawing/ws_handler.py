@@ -19,8 +19,8 @@ DATA_DIR = Path(__file__).parent.parent.parent / "data" / "drawing"
 PREFS_FILE = DATA_DIR / "preferences.json"
 HISTORY_FILE = DATA_DIR / "history.json"
 
-STREAM_BATCH_SIZE = 8  # 流式输出每批指令数
-STREAM_DELAY = 0.05    # 批次间延迟(秒)，模拟真人绘画节奏
+STREAM_BATCH_SIZE = 25  # 流式输出每批指令数
+STREAM_DELAY = 0.015   # 批次间延迟(秒)
 
 
 class DrawingSession:

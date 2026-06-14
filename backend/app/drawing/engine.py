@@ -230,8 +230,8 @@ class DrawingEngine:
     def generate_flow_field(self, params: Optional[Dict] = None) -> List[DrawingInstruction]:
         self._save_state()
         params = params or {}
-        particle_count = params.get("particle_count", 400)
-        step_count = params.get("step_count", 80)
+        particle_count = params.get("particle_count", 150)
+        step_count = params.get("step_count", 50)
         scale = params.get("noise_scale", 0.005)
         palette_name = params.get("palette", "neon")
         palette = PALETTES.get(palette_name, PALETTES["neon"])
@@ -274,7 +274,7 @@ class DrawingEngine:
     def generate_fractal_tree(self, params: Optional[Dict] = None) -> List[DrawingInstruction]:
         self._save_state()
         params = params or {}
-        depth = params.get("depth", 10)
+        depth = params.get("depth", 7)
         angle = params.get("branch_angle", 25)
         decay = params.get("length_decay", 0.72)
         start_len = params.get("start_length", 140)
@@ -324,7 +324,7 @@ class DrawingEngine:
     def generate_watercolor(self, params: Optional[Dict] = None) -> List[DrawingInstruction]:
         self._save_state()
         params = params or {}
-        layers = params.get("layers", 35)
+        layers = params.get("layers", 15)
         color = params.get("color", (180, 100, 200))
         cx = params.get("cx", self.width / 2)
         cy = params.get("cy", self.height / 2)
@@ -495,7 +495,7 @@ class DrawingEngine:
         colors = [_color_var(random.choice(palette), 15) for _ in range(seed_count)]
 
         # 网格采样近似 Voronoi
-        step = 8
+        step = 30
         for y in range(0, self.height, step):
             for x in range(0, self.width, step):
                 min_d = float('inf')
@@ -540,7 +540,7 @@ class DrawingEngine:
             instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         cx, cy = self.width / 2, self.height / 2
-        particle_count = params.get("count", 200)
+        particle_count = params.get("count", 80)
 
         for _ in range(particle_count):
             angle = random.uniform(0, math.pi * 2)
@@ -772,7 +772,7 @@ class DrawingEngine:
             (0.5, (200, 80, 60)), (0.65, (255, 150, 50)),
             (0.8, (255, 200, 100)), (1.0, (255, 230, 180)),
         ]
-        h_stripes = 200
+        h_stripes = 60
         for i in range(h_stripes):
             t = i / h_stripes
             c = self._interpolate_gradient(t, gradient_stops)
@@ -787,8 +787,8 @@ class DrawingEngine:
         # 太阳
         sun_x = self.width * 0.5
         sun_y = self.height * 0.48
-        for r in range(120, 0, -3):
-            alpha = 0.02 + (120 - r) / 120 * 0.08
+        for r in range(60, 0, -3):
+            alpha = 0.02 + (60 - r) / 60 * 0.08
             shape_params = {
                 "cx": sun_x, "cy": sun_y, "radius": r,
                 "fill": _color_with_alpha((255, 220, 100), alpha), "stroke": "transparent",
@@ -809,9 +809,9 @@ class DrawingEngine:
         instructions.append(DrawingInstruction(action="batch", params={"shapes": [s for s in self.shapes if s["layer"] >= 3]}, layer=3))
 
         # 海面反射
-        for i in range(60):
-            y = self.height * 0.72 + i * (self.height * 0.28 / 60)
-            t = i / 60
+        for i in range(20):
+            y = self.height * 0.72 + i * (self.height * 0.28 / 20)
+            t = i / 20
             c = self._interpolate_gradient(t, [(0, (200, 130, 80)), (0.5, (100, 60, 80)), (1, (30, 20, 50))])
             shape_params = {
                 "x": 0, "y": y, "width": self.width, "height": self.height * 0.28 / 60 + 1,
@@ -828,9 +828,9 @@ class DrawingEngine:
         instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         # 海面
-        for i in range(80):
-            y = self.height * 0.4 + i * (self.height * 0.6 / 80)
-            t = i / 80
+        for i in range(30):
+            y = self.height * 0.4 + i * (self.height * 0.6 / 30)
+            t = i / 30
             r = int(0 + t * 30)
             g = int(105 + t * 50)
             b = int(180 - t * 30)
@@ -841,7 +841,7 @@ class DrawingEngine:
             self._add_shape("rect", shape_params, layer=0)
 
         # 波浪线
-        for wave_i in range(15):
+        for wave_i in range(8):
             y_base = self.height * 0.45 + wave_i * 25
             pts = []
             for x in range(0, self.width, 3):
@@ -883,7 +883,7 @@ class DrawingEngine:
         instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         # 星星
-        for _ in range(300):
+        for _ in range(80):
             x = random.uniform(0, self.width)
             y = random.uniform(0, self.height * 0.7)
             r = random.uniform(0.5, 2.5)
@@ -892,17 +892,17 @@ class DrawingEngine:
             self._add_shape("circle", shape_params, layer=0)
 
         # 大亮星
-        for _ in range(15):
+        for _ in range(5):
             x = random.uniform(50, self.width - 50)
             y = random.uniform(30, self.height * 0.5)
-            for r in range(15, 0, -1):
+            for r in range(10, 0, -1):
                 alpha = 0.02 + (15 - r) / 15 * 0.1
                 shape_params = {"cx": x, "cy": y, "radius": r, "fill": _color_with_alpha((200, 220, 255), alpha), "stroke": "transparent"}
                 self._add_shape("circle", shape_params, layer=1)
 
         # 月亮
         mx, my = self.width * 0.8, self.height * 0.15
-        for r in range(50, 0, -2):
+        for r in range(25, 0, -2):
             alpha = 0.02 + (50 - r) / 50 * 0.06
             shape_params = {"cx": mx, "cy": my, "radius": r, "fill": _color_with_alpha((255, 250, 220), alpha), "stroke": "transparent"}
             self._add_shape("circle", shape_params, layer=2)
@@ -918,7 +918,7 @@ class DrawingEngine:
         instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         # 简化：用三角形树
-        for _ in range(20):
+        for _ in range(12):
             tx = random.uniform(50, self.width - 50)
             ty = random.uniform(self.height * 0.3, self.height * 0.7)
             h = random.uniform(80, 180)
@@ -948,14 +948,14 @@ class DrawingEngine:
         instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
         # 草地
-        for i in range(100):
-            y = self.height * 0.5 + i * (self.height * 0.5 / 100)
+        for i in range(40):
+            y = self.height * 0.5 + i * (self.height * 0.5 / 40)
             c = _color_var((100, 180, 60), 20)
             shape_params = {"x": 0, "y": y, "width": self.width, "height": self.height * 0.5 / 100 + 1, "fill": _color_str(c), "stroke": "transparent"}
             self._add_shape("rect", shape_params, layer=0)
 
         # 草叶
-        for _ in range(200):
+        for _ in range(60):
             x = random.uniform(0, self.width)
             y = random.uniform(self.height * 0.55, self.height * 0.95)
             h = random.uniform(15, 40)
@@ -974,8 +974,8 @@ class DrawingEngine:
         self.background = (240, 220, 190)
         instructions.append(DrawingInstruction(action="background", params={"color": _color_str(self.background)}))
 
-        for i in range(100):
-            y = self.height * 0.3 + i * (self.height * 0.7 / 100)
+        for i in range(40):
+            y = self.height * 0.3 + i * (self.height * 0.7 / 40)
             c = _color_var((220, 190, 140), 15)
             shape_params = {"x": 0, "y": y, "width": self.width, "height": self.height * 0.7 / 100 + 1, "fill": _color_str(c), "stroke": "transparent"}
             self._add_shape("rect", shape_params, layer=0)
@@ -994,7 +994,7 @@ class DrawingEngine:
         self._add_shape("polygon", shape_params, layer=0)
 
         # 雪花
-        for _ in range(150):
+        for _ in range(60):
             x = random.uniform(0, self.width)
             y = random.uniform(0, self.height)
             r = random.uniform(1, 4)
@@ -1015,7 +1015,7 @@ class DrawingEngine:
 
         # 花朵
         flower_colors = [(255, 150, 180), (255, 200, 100), (200, 150, 255), (255, 120, 120), (255, 180, 200)]
-        for _ in range(80):
+        for _ in range(30):
             x = random.uniform(30, self.width - 30)
             y = random.uniform(self.height * 0.55, self.height * 0.9)
             c = random.choice(flower_colors)
